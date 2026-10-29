@@ -2,6 +2,7 @@
 const PROFILES = [
   {
     id: "chee-reynaldo",
+    page: "CHEE.html",
     persona: "The Architectural Craftsman",
     name: "CHEE, Reynaldo Joseph",
     age: 22,
@@ -30,6 +31,7 @@ const PROFILES = [
   },
   {
     id: "dapog-john-greg",
+    page: "DAPOG.html",
     persona: "The Data & Backend Guardian",
     name: "DAPOG, John Greg",
     age: 22,
@@ -58,6 +60,7 @@ const PROFILES = [
   },
   {
     id: "fontelar-dave",
+    page: "FONTELAR.html",
     persona: "The Full-Stack & ML Specialist",
     name: "FONTELAR, Dave",
     age: 22,
@@ -86,6 +89,7 @@ const PROFILES = [
   },
   {
     id: "villanueva-justin",
+    page: "VILLANUEVA.html",
     persona: "The Interaction & UX Sculptor",
     name: "VILLANUEVA, Justin",
     age: 22,
@@ -128,6 +132,7 @@ let currentlyViewingProfile = null;
 
 // ROUTING / MODE SELECTION
 function startMode(mode) {
+  try { sessionStorage.setItem('pitchrMode', mode); } catch (e) {}
   document.getElementById('homeScreen').classList.add('hidden');
 
   if (mode === 'swipe') {
@@ -144,6 +149,7 @@ function startMode(mode) {
 }
 
 function goToHome() {
+  try { sessionStorage.removeItem('pitchrMode'); } catch (e) {}
   document.getElementById('homeScreen').classList.remove('hidden');
   document.getElementById('swipeAppScreen').classList.add('hidden');
   document.getElementById('directoryScreen').classList.add('hidden');
@@ -509,6 +515,11 @@ function openDetailFromMatch() {
 
 // FULL PROFILE SCREEN OVERLAY
 function openProfileScreen(profile) {
+  // Go to the member's own portfolio page (CHEE.html, DAPOG.html, ...)
+  if (profile && profile.page) {
+    window.location.href = profile.page;
+    return;
+  }
   currentlyViewingProfile = profile;
   document.getElementById('detailHeroImage').src = profile.image;
   document.getElementById('detailHeroName').textContent = profile.name;
@@ -669,4 +680,8 @@ function copyTeamContact() {
 
 window.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
+  // Returning from a profile page: reopen the view the visitor came from
+  let mode = null;
+  try { mode = sessionStorage.getItem('pitchrMode'); } catch (e) {}
+  if (mode === 'swipe' || mode === 'directory') startMode(mode);
 });

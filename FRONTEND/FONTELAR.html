@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FONTELAR, Dave • Pitchr</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+        colors: { tinder: { pink: '#FE3C72', coral: '#FD5564', orange: '#FF655B', purple: '#9B51E0', gold: '#FFD700', super: '#00D2FF' } },
+        boxShadow: {
+          'glow-pink': '0 10px 30px -5px rgba(254, 60, 114, 0.4)',
+          'soft': '0 20px 40px -15px rgba(0,0,0,0.12)'
+        }
+      } }
+    }
+  </script>
+</head>
+<body class="bg-gradient-to-br from-[#FFF1F2] via-[#FDF2F8] to-[#F3E8FF] text-zinc-900 font-sans antialiased min-h-screen selection:bg-tinder-pink selection:text-white">
+
+  <!-- Top bar -->
+  <header class="w-full max-w-xl mx-auto px-4 py-3 flex items-center justify-between sticky top-0 z-30 backdrop-blur-md">
+    <a href="index.html" class="px-4 py-2 rounded-xl bg-white border border-pink-100 shadow-sm text-zinc-700 hover:text-tinder-pink font-bold text-xs flex items-center gap-1.5 transition-colors">
+      <i data-lucide="arrow-left" class="w-4 h-4"></i><span>Back to team</span>
+    </a>
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-tinder-pink to-tinder-orange flex items-center justify-center shadow-glow-pink">
+        <i data-lucide="flame" class="w-5 h-5 text-white fill-white"></i>
+      </div>
+      <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-tinder-pink to-tinder-purple bg-clip-text text-transparent">pitchr.</span>
+    </a>
+  </header>
+
+  <main class="w-full max-w-xl mx-auto px-4 pb-32 space-y-5">
+
+    <!-- Hero profile card -->
+    <section class="rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden">
+      <div class="relative w-full aspect-[4/4.4] bg-zinc-900">
+        <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=80" alt="FONTELAR, Dave" class="w-full h-full object-cover" />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
+        <span class="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>Open for Projects
+        </span>
+        <div class="absolute bottom-4 left-5 right-5 text-white">
+          <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1.5">The Full-Stack & ML Specialist</span>
+          <div class="flex items-center gap-2">
+            <h1 class="text-2xl font-black">FONTELAR, Dave</h1>
+            <span class="text-xl font-medium text-zinc-300">22</span>
+            <i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>
+          </div>
+          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-1">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> Manila, Philippines
+          </p>
+        </div>
+      </div>
+      <div class="p-5 flex items-center justify-between gap-3">
+        <span class="text-sm font-bold text-zinc-800 flex items-center gap-1.5"><i data-lucide="briefcase" class="w-4 h-4 text-tinder-pink"></i>Full-Stack & Systems Developer</span>
+        <span class="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">98% Match</span>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-2">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">About Dave</h2>
+      <p class="text-sm font-semibold text-zinc-800 leading-relaxed">Builds intelligent full-stack applications with React & FastAPI, data engineering pipelines, and retro terminal web tools.</p>
+      <p class="text-xs text-zinc-600 leading-relaxed">Full-stack engineer focusing on end-to-end applications, machine learning integration, and responsive frontend systems. Experienced in Python FastAPI microservices, data cleaning workflows, and modern reactive layouts.</p>
+    </section>
+
+    <!-- Why match -->
+    <section class="bg-rose-50/70 rounded-3xl p-5 border border-rose-100/70 space-y-1.5">
+      <h2 class="text-xs font-black uppercase tracking-wider text-tinder-pink">Why You Should Match</h2>
+      <p class="text-xs text-zinc-700 font-medium">✅ Thoroughly preprocesses datasets before running models</p><p class="text-xs text-zinc-700 font-medium">✅ Keeps terminal UI retro and lightning snappy</p><p class="text-xs text-zinc-700 font-medium">✅ Clean Git commits and organized repos</p>
+    </section>
+
+    <!-- Skills -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-3">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Core Stack</h2>
+      <div class="flex flex-wrap gap-1.5"><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ React</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Node.js</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Python</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ FastAPI</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ MongoDB</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Data Pipelines</span></div>
+    </section>
+
+    <!-- Projects -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-3">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Featured Projects</h2>
+      <div class="space-y-2.5"><div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl"><h4 class="text-sm font-bold text-zinc-900">Retainify Platform</h4><p class="text-xs text-zinc-500 mt-1 leading-relaxed">Predictive student academic attrition risk classification tool powered by FastAPI and Random Forest models.</p></div><div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl"><h4 class="text-sm font-bold text-zinc-900">CRT Terminal Cyberdeck</h4><p class="text-xs text-zinc-500 mt-1 leading-relaxed">Retro web calculator featuring animated CRT phosphor styling and tactile keyboard logic.</p></div></div>
+    </section>
+
+    <!-- Contact -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-4">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Connect</h2>
+      <a href="mailto:fontelar.dave@example.com?subject=Matched on Team Portfolio!" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white font-extrabold text-sm shadow-glow-pink hover:opacity-95 transition-all flex items-center justify-center gap-2">
+        <i data-lucide="mail" class="w-4 h-4"></i><span>Get In Touch</span>
+      </a>
+      <div class="flex gap-4">
+        <a href="https://github.com" target="_blank" rel="noopener" class="text-xs font-bold text-zinc-600 hover:text-zinc-900 flex items-center gap-1"><i data-lucide="github" class="w-4 h-4"></i> GitHub</a>
+        <a href="https://linkedin.com" target="_blank" rel="noopener" class="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1"><i data-lucide="linkedin" class="w-4 h-4"></i> LinkedIn</a>
+      </div>
+    </section>
+
+    <!-- Rest of the team -->
+    <section class="space-y-2.5">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400 px-1">More from the team</h2>
+      <div class="space-y-2">
+        <a href="CHEE.html" class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-50 hover:bg-pink-50/60 border border-zinc-100 transition-colors">
+          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80" alt="" class="w-11 h-11 rounded-xl object-cover" />
+          <div class="min-w-0 flex-1"><p class="text-xs font-extrabold text-zinc-900 truncate">CHEE, Reynaldo Joseph</p><p class="text-[11px] text-zinc-500 truncate">Full Stack Developer</p></div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-400"></i>
+        </a>
+        <a href="DAPOG.html" class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-50 hover:bg-pink-50/60 border border-zinc-100 transition-colors">
+          <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80" alt="" class="w-11 h-11 rounded-xl object-cover" />
+          <div class="min-w-0 flex-1"><p class="text-xs font-extrabold text-zinc-900 truncate">DAPOG, John Greg</p><p class="text-[11px] text-zinc-500 truncate">Backend Engineer</p></div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-400"></i>
+        </a>
+        <a href="VILLANUEVA.html" class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-50 hover:bg-pink-50/60 border border-zinc-100 transition-colors">
+          <img src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=800&q=80" alt="" class="w-11 h-11 rounded-xl object-cover" />
+          <div class="min-w-0 flex-1"><p class="text-xs font-extrabold text-zinc-900 truncate">VILLANUEVA, Justin</p><p class="text-[11px] text-zinc-500 truncate">Frontend & UI/UX Developer</p></div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-400"></i>
+        </a></div>
+    </section>
+  </main>
+
+  <!-- Action dock -->
+  <div class="fixed bottom-4 left-0 right-0 z-30 flex items-center justify-center gap-4 pointer-events-none">
+    <a href="index.html" title="Back to team" class="pointer-events-auto w-12 h-12 rounded-full bg-white shadow-soft border border-red-50 flex items-center justify-center text-rose-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="x" class="w-6 h-6 stroke-[2.5]"></i></a>
+    <button onclick="likeProfile()" title="Match" class="pointer-events-auto w-14 h-14 rounded-full bg-white shadow-soft border border-emerald-50 flex items-center justify-center text-emerald-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="heart" class="w-7 h-7 fill-emerald-500 stroke-none"></i></button>
+    <a href="mailto:fontelar.dave@example.com?subject=Matched on Team Portfolio!" title="Email" class="pointer-events-auto w-12 h-12 rounded-full bg-white shadow-soft border border-purple-50 flex items-center justify-center text-purple-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="mail" class="w-5 h-5"></i></a>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white px-4 py-3 rounded-2xl shadow-xl translate-y-10 opacity-0 transition-all duration-300 pointer-events-none">
+    <p class="text-xs font-bold">♥ It's a match with Dave!</p>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    function likeProfile() {
+      confetti({ particleCount: 90, spread: 80, origin: { y: 0.8 }, colors: ['#FE3C72', '#FD5564', '#FFD700', '#00D2FF', '#FFFFFF'] });
+      const t = document.getElementById('toast');
+      t.classList.remove('translate-y-10', 'opacity-0');
+      setTimeout(() => t.classList.add('translate-y-10', 'opacity-0'), 2200);
+    }
+  </script>
+</body>
+</html>
