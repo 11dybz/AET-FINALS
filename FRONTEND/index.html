@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MatchMe • Date Me or Hire Me?</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            tinder: {
+              pink: '#FE3C72',
+              coral: '#FD5564',
+              orange: '#FF655B',
+              purple: '#9B51E0',
+              gold: '#FFD700',
+              super: '#00D2FF',
+              pass: '#E53E3E',
+              dark: '#111418',
+              cardDark: '#1E232B'
+            }
+          },
+          boxShadow: {
+            'glow-pink': '0 10px 30px -5px rgba(254, 60, 114, 0.4)',
+            'glow-super': '0 10px 30px -5px rgba(0, 210, 255, 0.4)',
+            'soft': '0 20px 40px -15px rgba(0,0,0,0.12)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Card drag smoothness */
+    .card-transition {
+      transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+    }
+    
+    /* Touch actions for clean swiping */
+    .swipe-card {
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Floating heart animation */
+    @keyframes pulse-subtle {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-subtle 2.5s infinite ease-in-out;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-[#FFF1F2] via-[#FDF2F8] to-[#F3E8FF] text-zinc-900 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-tinder-pink selection:text-white">
+
+  <!-- APP NAVBAR -->
+  <header class="w-full max-w-lg mx-auto px-4 py-3 flex items-center justify-between z-30">
+    <div class="flex items-center gap-2">
+      <!-- Flame logo -->
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-tinder-pink to-tinder-orange flex items-center justify-center shadow-glow-pink">
+        <i data-lucide="flame" class="w-6 h-6 text-white fill-white"></i>
+      </div>
+      <div>
+        <h1 class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-tinder-pink to-tinder-purple bg-clip-text text-transparent">
+          pitchr.
+        </h1>
+        <p class="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Date Me • Hire Me</p>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-2">
+      <button onclick="toggleInfoModal()" class="w-10 h-10 rounded-full bg-white border border-pink-100 shadow-sm flex items-center justify-center text-zinc-600 hover:text-tinder-pink transition-colors">
+        <i data-lucide="sparkles" class="w-4 h-4"></i>
+      </button>
+
+      <button onclick="toggleMatchesDrawer(true)" class="relative px-3.5 py-2 rounded-full bg-white border border-pink-100 shadow-sm flex items-center gap-2 text-zinc-700 hover:text-tinder-pink font-bold text-xs transition-transform active:scale-95">
+        <i data-lucide="heart" class="w-4 h-4 text-tinder-pink fill-tinder-pink"></i>
+        <span>Matches</span>
+        <span id="matchBadge" class="w-5 h-5 rounded-full bg-tinder-pink text-white text-[10px] font-black flex items-center justify-center">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN SWIPE STACK CONTAINER -->
+  <main class="w-full max-w-md mx-auto px-4 flex-1 flex flex-col justify-center items-center relative my-2">
+    
+    <!-- Outer Deck Box -->
+    <div id="deckContainer" class="relative w-full aspect-[3/4.6] max-h-[580px] min-h-[520px]">
+
+      <!-- EMPTY STATE (WHEN ALL CARDS SWIPED) -->
+      <div id="emptyDeck" class="absolute inset-0 bg-white rounded-3xl p-8 border border-pink-100 shadow-soft flex flex-col items-center justify-center text-center hidden z-0">
+        <div class="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mb-4 text-tinder-pink animate-pulse-subtle">
+          <i data-lucide="radar" class="w-10 h-10"></i>
+        </div>
+        <h3 class="text-2xl font-black text-zinc-800 tracking-tight">You've seen all sides of me!</h3>
+        <p class="text-xs text-zinc-500 mt-2 max-w-xs leading-relaxed">
+          Still wondering if we are a perfect match? You can review your saved vibes or restart the stack.
+        </p>
+        <div class="flex flex-col gap-2.5 w-full max-w-xs mt-6">
+          <button onclick="resetDeck()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white text-xs font-bold shadow-glow-pink hover:opacity-95 transition-all">
+            Reload Pitch Cards
+          </button>
+          <button onclick="toggleMatchesDrawer(true)" class="w-full py-3 rounded-2xl bg-zinc-100 text-zinc-700 text-xs font-bold hover:bg-zinc-200 transition-all">
+            View My Matched Perks
+          </button>
+        </div>
+      </div>
+
+      <!-- CARDS ARE RENDERED DYNAMICALLY BY JAVASCRIPT HERE -->
+      <div id="cardsWrapper" class="relative w-full h-full"></div>
+
+    </div>
+
+    <!-- TINDER BOTTOM ACTION DOCK -->
+    <div class="w-full max-w-xs flex items-center justify-between mt-5 mb-2 z-20">
+      
+      <!-- Rewind / Reset -->
+      <button onclick="resetDeck()" title="Rewind Stack" class="w-12 h-12 rounded-full bg-white shadow-soft border border-zinc-100 flex items-center justify-center text-amber-500 hover:scale-110 active:scale-95 transition-all">
+        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Dislike / Pass (Red X) -->
+      <button onclick="triggerSwipeAction('left')" title="Pass / Swipe Left" class="w-16 h-16 rounded-full bg-white shadow-soft border border-red-50 flex items-center justify-center text-rose-500 hover:scale-110 active:scale-90 hover:bg-rose-50 transition-all">
+        <i data-lucide="x" class="w-8 h-8 stroke-[2.5]"></i>
+      </button>
+
+      <!-- Super Like (Blue Star) -->
+      <button onclick="triggerSwipeAction('up')" title="Super Like / Priority Hire" class="w-12 h-12 rounded-full bg-white shadow-soft border border-sky-50 flex items-center justify-center text-sky-400 hover:scale-110 active:scale-90 hover:bg-sky-50 transition-all">
+        <i data-lucide="star" class="w-6 h-6 fill-sky-400"></i>
+      </button>
+
+      <!-- Like / Hire (Green / Pink Heart) -->
+      <button onclick="triggerSwipeAction('right')" title="Match / Swipe Right" class="w-16 h-16 rounded-full bg-white shadow-soft border border-emerald-50 flex items-center justify-center text-emerald-500 hover:scale-110 active:scale-90 hover:bg-emerald-50 transition-all">
+        <i data-lucide="heart" class="w-8 h-8 fill-emerald-500 stroke-none"></i>
+      </button>
+
+      <!-- Instant Message / Contact -->
+      <button onclick="openContactPrompt()" title="Send Quick DM" class="w-12 h-12 rounded-full bg-white shadow-soft border border-purple-50 flex items-center justify-center text-purple-500 hover:scale-110 active:scale-95 transition-all">
+        <i data-lucide="message-circle" class="w-5 h-5"></i>
+      </button>
+
+    </div>
+
+    <!-- Quick Keyboard / Gesture Tip -->
+    <div class="text-[11px] font-semibold text-zinc-400 flex items-center gap-2">
+      <span>Swipe cards left / right or use buttons</span>
+    </div>
+  </main>
+
+  <!-- MATCH CELEBRATION MODAL (IT'S A MATCH!) -->
+  <div id="matchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="w-full max-w-sm bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 text-center shadow-2xl transform scale-90 transition-transform duration-300" id="matchModalBox">
+      
+      <!-- Script logo font -->
+      <div class="text-4xl sm:text-5xl font-black italic tracking-tighter bg-gradient-to-r from-tinder-pink via-tinder-orange to-yellow-400 bg-clip-text text-transparent my-2 animate-bounce">
+        It's a Match!
+      </div>
+      
+      <p id="matchModalSubtitle" class="text-zinc-300 text-xs mt-1">
+        You and <strong class="text-white">Alex Morgan</strong> share great taste in humans & developers.
+      </p>
+
+      <!-- Overlapping Avatar Circles -->
+      <div class="flex items-center justify-center -space-x-4 my-6">
+        <div class="w-20 h-20 rounded-full border-4 border-tinder-pink overflow-hidden bg-zinc-800 shadow-glow-pink">
+          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" alt="Alex" class="w-full h-full object-cover">
+        </div>
+        <div class="w-20 h-20 rounded-full border-4 border-emerald-400 overflow-hidden bg-zinc-800 shadow-lg flex items-center justify-center">
+          <div class="w-full h-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-black text-xl">
+            YOU
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <button onclick="openChatFromMatch()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white font-extrabold text-sm shadow-glow-pink hover:opacity-95 transition-all flex items-center justify-center gap-2">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Send A Coffee / Interview Invite</span>
+        </button>
+
+        <button onclick="closeMatchModal()" class="w-full py-3 rounded-2xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs transition-colors">
+          Keep Swiping
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SAVED MATCHES DRAWER -->
+  <div id="matchesDrawerBackdrop" onclick="toggleMatchesDrawer(false)" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-300"></div>
+  
+  <aside id="matchesDrawer" class="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
+    <!-- Header -->
+    <div class="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/60">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full bg-tinder-pink/10 text-tinder-pink flex items-center justify-center">
+          <i data-lucide="heart-handshake" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h3 class="font-extrabold text-sm text-zinc-900">Your Swiped Matches</h3>
+          <p class="text-[11px] text-zinc-400">Cards you swiped right or super-liked</p>
+        </div>
+      </div>
+      <button onclick="toggleMatchesDrawer(false)" class="w-8 h-8 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-800 flex items-center justify-center">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Items list -->
+    <div id="matchesList" class="flex-1 overflow-y-auto p-4 space-y-3">
+      <!-- Injected via JavaScript -->
+    </div>
+
+    <!-- Drawer Footer -->
+    <div class="p-4 border-t border-zinc-100 bg-zinc-50 space-y-2">
+      <button onclick="copyContactInfo()" class="w-full py-3 bg-zinc-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="copy" class="w-4 h-4"></i>
+        <span>Copy My Direct Contact Email</span>
+      </button>
+      <p class="text-[10px] text-zinc-400 text-center">Available for Full-time roles, Freelance & Good Coffee ☕</p>
+    </div>
+  </aside>
+
+  <!-- APP INFO MODAL -->
+  <div id="infoModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl text-left space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-black text-lg text-zinc-900">About This Portfolio</h3>
+        <button onclick="toggleInfoModal()" class="w-8 h-8 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-800 flex items-center justify-center">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <p class="text-xs text-zinc-600 leading-relaxed">
+        Why send a boring generic PDF resume when you can pitch yourself like a modern dating profile? 
+        Swipe through my developer personas, favorite tech stacks, quirks, and why we’d make a killer team!
+      </p>
+      <div class="bg-pink-50 rounded-2xl p-3 border border-pink-100 text-xs text-pink-800 space-y-1">
+        <p class="font-bold">🔥 Pro Tip:</p>
+        <p>• Swipe <strong>Right</strong> or tap Heart to hire/connect.</p>
+        <p>• Swipe <strong>Up</strong> or tap Blue Star to Super-Like.</p>
+        <p>• Swipe <strong>Left</strong> or tap X to pass (if you dare!).</p>
+      </div>
+      <button onclick="toggleInfoModal()" class="w-full py-2.5 rounded-xl bg-zinc-900 text-white font-bold text-xs">
+        Got It, Let's Swipe!
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST FEEDBACK -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 bg-zinc-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <span id="toastIcon" class="w-6 h-6 rounded-full bg-tinder-pink flex items-center justify-center text-white text-xs font-bold">♥</span>
+    <p id="toastMessage" class="text-xs font-bold">Swiped Right!</p>
+  </div>
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    // PROFILE CARDS DATA MODEL (Sell yourself across different modes)
+    const PROFILES = [
+      {
+        id: "profile-1",
+        persona: "The Full-Stack Alchemist",
+        name: "Alex Morgan",
+        age: 25,
+        location: "San Francisco / Remote (Worldwide)",
+        role: "Senior Frontend & Fullstack Engineer",
+        image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+        verified: true,
+        matchPercentage: "99% Match",
+        bio: "Turns caffeine and Figma files into pixel-perfect, hyper-fast reactive web apps. Looking for high-impact teams or partners who appreciate good UI, clean Git histories, and spontaneous tacos.",
+        tags: ["React & Vue wizard", "TypeScript lover", "Tailwind fanatic", "Clean Architecture", "Ship fast, iterate faster"],
+        dealbreakers: [
+          "✅ Never leaves console.log in production",
+          "✅ Cooks authentic homemade carbonara",
+          "✅ Answers Slack within 3 minutes"
+        ],
+        idealMatch: "A company with clear vision, zero micro-management, and high standards for design."
+      },
+      {
+        id: "profile-2",
+        persona: "The Midnight Bug Hunter",
+        name: "Alex (Late Night Edition)",
+        age: 25,
+        location: "In the zone, listening to Synthwave",
+        role: "API Architect & Backend Craftsman",
+        image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
+        verified: true,
+        matchPercentage: "96% Match",
+        bio: "Fluent in Spring Boot, Node.js, and SQL indexing. I find that elusive race condition you've been dreading for 2 weeks. Loves scalable architectures, clean REST/GraphQL APIs, and mechanical keyboards.",
+        tags: ["Spring Boot", "PostgreSQL", "Docker & CI/CD", "Redis Caching", "Zero-downtime deploys"],
+        dealbreakers: [
+          "✅ Obsessed with database query speeds (<20ms)",
+          "✅ Always writes comprehensive integration tests",
+          "✅ Plays killer chess between builds"
+        ],
+        idealMatch: "Teams scaling from 10k to 10M users that need solid structural foundations."
+      },
+      {
+        id: "profile-3",
+        persona: "The Cultural Value Add",
+        name: "Alex (The Team Player)",
+        age: 25,
+        location: "Your next team standup",
+        role: "Product Mindset & Design Enthusiast",
+        image: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=800&q=80",
+        verified: true,
+        matchPercentage: "98% Match",
+        bio: "I don't just write code; I advocate for users, champion accessibility, and make meetings 50% shorter by actually listening. Will happily mentor junior devs and supply hilarious team GIFs.",
+        tags: ["UX Intuitive", "Clear Communicator", "Zero Ego", "Cross-functional", "Great Playlist Curator"],
+        dealbreakers: [
+          "✅ Never argues over tabs vs spaces (uses Prettier)",
+          "✅ Brings positive energy to stressful deadlines",
+          "✅ Reliable under pressure"
+        ],
+        idealMatch: "People who take their craft seriously, but don't take themselves too seriously."
+      }
+    ];
+
+    // STATE
+    let cardsState = [...PROFILES];
+    let matchedProfiles = [];
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+    let activeCardElem = null;
+
+    // Web Audio Sound Synth for snappy feedback
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(type) {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        const now = audioCtx.currentTime;
+        if (type === 'like') {
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.2);
+        } else if (type === 'super') {
+          osc.frequency.setValueAtTime(587.33, now);
+          osc.frequency.setValueAtTime(880, now + 0.1);
+          osc.frequency.setValueAtTime(1174.66, now + 0.2);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else {
+          osc.frequency.setValueAtTime(320, now);
+          osc.frequency.exponentialRampToValueAtTime(160, now + 0.15);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+          osc.start(now);
+          osc.stop(now + 0.15);
+        }
+      } catch (e) {
+        // AudioContext autoplay restrictions fallback
+      }
+    }
+
+    // INIT
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      renderDeck();
+    });
+
+    // RENDER PROFILE STACK
+    function renderDeck() {
+      const container = document.getElementById('cardsWrapper');
+      const emptyDeck = document.getElementById('emptyDeck');
+      container.innerHTML = '';
+
+      if (cardsState.length === 0) {
+        emptyDeck.classList.remove('hidden');
+        return;
+      }
+      emptyDeck.classList.add('hidden');
+
+      // Render cards in reverse order so index 0 is on top
+      for (let i = cardsState.length - 1; i >= 0; i--) {
+        const profile = cardsState[i];
+        const isTopCard = (i === 0);
+        const card = document.createElement('div');
+        
+        // Stack visual offset
+        const scale = 1 - (i * 0.04);
+        const translateY = i * 10;
+        const zIndex = 30 - i;
+
+        card.className = `swipe-card absolute inset-0 w-full h-full rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden flex flex-col justify-between select-none ${isTopCard ? 'cursor-grab active:cursor-grabbing card-transition' : ''}`;
+        card.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
+        card.style.zIndex = zIndex;
+        card.setAttribute('data-id', profile.id);
+
+        card.innerHTML = `
+          <!-- CARD IMAGE HERO & GRADIENT OVERLAY -->
+          <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900">
+            <img src="${profile.image}" alt="${profile.name}" class="w-full h-full object-cover pointer-events-none" />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
+
+            <!-- LIKE / NOPE / SUPER STAMP BADGES -->
+            <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity pointer-events-none">
+              HIRE / LIKE
+            </div>
+            <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity pointer-events-none">
+              PASS
+            </div>
+            <div class="stamp-super absolute bottom-14 left-1/2 -translate-x-1/2 border-4 border-sky-400 text-sky-400 font-black text-xl uppercase tracking-wider px-3 py-1 rounded-xl opacity-0 transition-opacity pointer-events-none">
+              SUPER LIKE ★
+            </div>
+
+            <!-- Top Pill Badges -->
+            <div class="absolute top-4 left-4 flex items-center gap-2">
+              <span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                Open for Opportunities
+              </span>
+            </div>
+
+            <!-- Persona & Name Over Image -->
+            <div class="absolute bottom-3 left-4 right-4 text-white">
+              <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
+                ${profile.persona}
+              </span>
+              <div class="flex items-center gap-2">
+                <h2 class="text-2xl font-black">${profile.name}</h2>
+                <span class="text-xl font-medium text-zinc-300">${profile.age}</span>
+                ${profile.verified ? `<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>` : ''}
+              </div>
+              <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.location}
+              </p>
+            </div>
+          </div>
+
+          <!-- CARD BODY / BIO & PERKS -->
+          <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white">
+            <!-- Job title & match rating -->
+            <div class="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.role}
+              </span>
+              <span class="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                ${profile.matchPercentage}
+              </span>
+            </div>
+
+            <!-- Bio snippet -->
+            <p class="text-xs text-zinc-600 leading-relaxed font-normal">
+              ${profile.bio}
+            </p>
+
+            <!-- Skill Badges -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              ${profile.tags.map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[10px] font-bold transition-colors">⚡ ${t}</span>`).join('')}
+            </div>
+
+            <!-- Green Flags / Dealbreakers -->
+            <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1">
+              <span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Swipe Right:</span>
+              ${profile.dealbreakers.map(d => `<p class="text-[11px] text-zinc-700 font-medium">${d}</p>`).join('')}
+            </div>
+          </div>
+        `;
+
+        container.appendChild(card);
+      }
+
+      lucide.createIcons();
+      attachTopCardListeners();
+    }
+
+    // ATTACH DRAG / SWIPE GESTURES TO TOP CARD
+    function attachTopCardListeners() {
+      const topCard = document.querySelector('.swipe-card:last-child');
+      if (!topCard) return;
+
+      activeCardElem = topCard;
+
+      // Mouse events
+      topCard.addEventListener('mousedown', onDragStart);
+      window.addEventListener('mousemove', onDragMove);
+      window.addEventListener('mouseup', onDragEnd);
+
+      // Touch events
+      topCard.addEventListener('touchstart', onDragStart, { passive: true });
+      window.addEventListener('touchmove', onDragMove, { passive: false });
+      window.addEventListener('touchend', onDragEnd);
+    }
+
+    function onDragStart(e) {
+      if (!activeCardElem) return;
+      isDragging = true;
+      activeCardElem.classList.remove('card-transition');
+
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      startX = clientX;
+      startY = clientY;
+    }
+
+    function onDragMove(e) {
+      if (!isDragging || !activeCardElem) return;
+
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+      currentX = clientX - startX;
+      currentY = clientY - startY;
+
+      // Tilt based on horizontal offset
+      const rotate = currentX * 0.08;
+      activeCardElem.style.transform = `translate3d(${currentX}px, ${currentY}px, 0px) rotate(${rotate}deg)`;
+
+      // Dynamic stamp badge opacities
+      const stampLike = activeCardElem.querySelector('.stamp-like');
+      const stampNope = activeCardElem.querySelector('.stamp-nope');
+      const stampSuper = activeCardElem.querySelector('.stamp-super');
+
+      if (currentX > 30) {
+        stampLike.style.opacity = Math.min((currentX - 30) / 70, 1);
+        stampNope.style.opacity = 0;
+        stampSuper.style.opacity = 0;
+      } else if (currentX < -30) {
+        stampNope.style.opacity = Math.min((-currentX - 30) / 70, 1);
+        stampLike.style.opacity = 0;
+        stampSuper.style.opacity = 0;
+      } else if (currentY < -40) {
+        stampSuper.style.opacity = Math.min((-currentY - 40) / 60, 1);
+        stampLike.style.opacity = 0;
+        stampNope.style.opacity = 0;
+      } else {
+        stampLike.style.opacity = 0;
+        stampNope.style.opacity = 0;
+        stampSuper.style.opacity = 0;
+      }
+    }
+
+    function onDragEnd() {
+      if (!isDragging || !activeCardElem) return;
+      isDragging = false;
+
+      const threshold = 110;
+      const superThreshold = -120;
+
+      if (currentX > threshold) {
+        finalizeSwipe('right');
+      } else if (currentX < -threshold) {
+        finalizeSwipe('left');
+      } else if (currentY < superThreshold) {
+        finalizeSwipe('up');
+      } else {
+        // Snap back to initial center
+        activeCardElem.classList.add('card-transition');
+        activeCardElem.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
+        const stamps = activeCardElem.querySelectorAll('.stamp-like, .stamp-nope, .stamp-super');
+        stamps.forEach(s => s.style.opacity = 0);
+      }
+
+      currentX = 0;
+      currentY = 0;
+    }
+
+    // BUTTON TRIGGER ACTIONS
+    function triggerSwipeAction(direction) {
+      if (cardsState.length === 0 || !activeCardElem) return;
+      finalizeSwipe(direction);
+    }
+
+    // FINALIZE SWIPE WITH SMOOTH TRANSITION
+    function finalizeSwipe(direction) {
+      if (!activeCardElem) return;
+
+      const card = activeCardElem;
+      const swipedProfile = cardsState[0];
+      card.classList.add('card-transition');
+
+      if (direction === 'right') {
+        playBeep('like');
+        card.style.transform = 'translate3d(600px, 50px, 0px) rotate(25deg)';
+        card.style.opacity = '0';
+        handleMatchSuccess(swipedProfile, false);
+      } else if (direction === 'left') {
+        playBeep('pass');
+        card.style.transform = 'translate3d(-600px, 50px, 0px) rotate(-25deg)';
+        card.style.opacity = '0';
+        showToast("Passed", "Maybe on the next project!");
+      } else if (direction === 'up') {
+        playBeep('super');
+        card.style.transform = 'translate3d(0px, -700px, 0px) rotate(0deg)';
+        card.style.opacity = '0';
+        handleMatchSuccess(swipedProfile, true);
+      }
+
+      setTimeout(() => {
+        cardsState.shift();
+        renderDeck();
+      }, 300);
+    }
+
+    // HANDLE SUCCESSFUL RIGHT / SUPER SWIPE
+    function handleMatchSuccess(profile, isSuper) {
+      if (!matchedProfiles.some(p => p.id === profile.id)) {
+        matchedProfiles.push({ ...profile, isSuper });
+        updateMatchesUI();
+      }
+
+      // Fire confetti
+      confetti({
+        particleCount: isSuper ? 120 : 70,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#FE3C72', '#FD5564', '#FFD700', '#00D2FF', '#FFFFFF']
+      });
+
+      // Show match modal celebration
+      const modal = document.getElementById('matchModal');
+      const box = document.getElementById('matchModalBox');
+      const subtitle = document.getElementById('matchModalSubtitle');
+
+      subtitle.innerHTML = isSuper 
+        ? `🔥 <strong>SUPER LIKE!</strong> You unlocked priority interview status with ${profile.name}!`
+        : `You and <strong>${profile.name}</strong> (${profile.persona}) just matched!`;
+
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      box.classList.remove('scale-90');
+      box.classList.add('scale-100');
+
+      showToast(isSuper ? "★ SUPER LIKED!" : "♥ MATCHED!", `Added to your Matches.`);
+    }
+
+    function closeMatchModal() {
+      const modal = document.getElementById('matchModal');
+      const box = document.getElementById('matchModalBox');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      box.classList.remove('scale-100');
+      box.classList.add('scale-90');
+    }
+
+    // MATCHES DRAWER
+    function toggleMatchesDrawer(show) {
+      const drawer = document.getElementById('matchesDrawer');
+      const backdrop = document.getElementById('matchesDrawerBackdrop');
+
+      if (show) {
+        backdrop.classList.remove('opacity-0', 'pointer-events-none');
+        drawer.classList.remove('translate-x-full');
+      } else {
+        backdrop.classList.add('opacity-0', 'pointer-events-none');
+        drawer.classList.add('translate-x-full');
+      }
+    }
+
+    function updateMatchesUI() {
+      const count = matchedProfiles.length;
+      document.getElementById('matchBadge').textContent = count;
+      
+      const list = document.getElementById('matchesList');
+      list.innerHTML = '';
+
+      if (count === 0) {
+        list.innerHTML = `
+          <div class="py-16 text-center text-zinc-400">
+            <i data-lucide="heart-crack" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+            <p class="text-xs font-bold text-zinc-600">No matches yet</p>
+            <p class="text-[11px] text-zinc-400 mt-0.5">Swipe right on a persona to connect!</p>
+          </div>
+        `;
+      } else {
+        matchedProfiles.forEach(item => {
+          const row = document.createElement('div');
+          row.className = "flex items-center gap-3 p-3 bg-zinc-50 hover:bg-pink-50/50 rounded-2xl border border-zinc-100 transition-colors";
+          row.innerHTML = `
+            <img src="${item.image}" class="w-12 h-12 rounded-xl object-cover" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <h4 class="font-extrabold text-xs text-zinc-900 truncate">${item.name}</h4>
+                ${item.isSuper ? `<span class="text-[9px] bg-sky-100 text-sky-600 px-1.5 py-0.2 rounded font-black">SUPER</span>` : ''}
+              </div>
+              <p class="text-[11px] text-zinc-500 truncate">${item.role}</p>
+            </div>
+            <button onclick="openDirectEmail('${item.persona}')" class="px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold hover:bg-tinder-coral transition-colors flex items-center gap-1">
+              <i data-lucide="mail" class="w-3.5 h-3.5"></i>
+              <span>Ping</span>
+            </button>
+          `;
+          list.appendChild(row);
+        });
+      }
+
+      lucide.createIcons();
+    }
+
+    // RESET DECK
+    function resetDeck() {
+      cardsState = [...PROFILES];
+      renderDeck();
+      showToast("Deck Reloaded", "Start swiping fresh!");
+    }
+
+    // TOAST HELPER
+    function showToast(title, subtitle) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = `${title} • ${subtitle}`;
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2000);
+    }
+
+    function toggleInfoModal() {
+      const modal = document.getElementById('infoModal');
+      const isOpen = !modal.classList.contains('pointer-events-none');
+      if (isOpen) {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      } else {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    // CONTACT & ACTION DISPATCH
+    function openContactPrompt() {
+      const email = "alex.morgan.dev@example.com";
+      const subject = encodeURIComponent("Hey Alex! We matched on your Pitchr Portfolio");
+      window.location.href = `mailto:${email}?subject=${subject}`;
+    }
+
+    function openDirectEmail(persona) {
+      const email = "alex.morgan.dev@example.com";
+      const subject = encodeURIComponent(`Matched with: ${persona}`);
+      window.location.href = `mailto:${email}?subject=${subject}`;
+    }
+
+    function openChatFromMatch() {
+      closeMatchModal();
+      openContactPrompt();
+    }
+
+    function copyContactInfo() {
+      const emailText = "alex.morgan.dev@example.com";
+      const textarea = document.createElement('textarea');
+      textarea.value = emailText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      showToast("Copied to Clipboard!", emailText);
+    }
+  </script>
+</body>
+</html>
