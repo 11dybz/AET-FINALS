@@ -118,13 +118,78 @@ const PROFILES = [
 let cardsState = [...PROFILES];
 let matchedProfiles = [];
 let isDragging = false;
-let hasSwipedOrMoved = false; // Prevents swipe gesture from triggering click
+let hasSwipedOrMoved = false;
 let startX = 0;
 let startY = 0;
 let currentX = 0;
 let currentY = 0;
 let activeCardElem = null;
 let currentlyViewingProfile = null;
+
+// ROUTING / MODE SELECTION
+function startMode(mode) {
+  document.getElementById('homeScreen').classList.add('hidden');
+
+  if (mode === 'swipe') {
+    document.getElementById('swipeAppScreen').classList.remove('hidden');
+    document.getElementById('directoryScreen').classList.add('hidden');
+    renderDeck();
+  } else if (mode === 'directory') {
+    document.getElementById('directoryScreen').classList.remove('hidden');
+    document.getElementById('directoryScreen').classList.add('flex');
+    document.getElementById('swipeAppScreen').classList.add('hidden');
+    renderDirectory();
+  }
+  lucide.createIcons();
+}
+
+function goToHome() {
+  document.getElementById('homeScreen').classList.remove('hidden');
+  document.getElementById('swipeAppScreen').classList.add('hidden');
+  document.getElementById('directoryScreen').classList.add('hidden');
+  document.getElementById('directoryScreen').classList.remove('flex');
+  closeProfileScreen();
+  lucide.createIcons();
+}
+
+// RENDER DIRECT DIRECTORY VIEW (NO-SWIPING OPTION)
+function renderDirectory() {
+  const grid = document.getElementById('directoryGrid');
+  grid.innerHTML = '';
+
+  PROFILES.forEach(profile => {
+    const card = document.createElement('div');
+    card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg transition-all";
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center gap-3.5 mb-4">
+          <img src="${profile.image}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
+          <div>
+            <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${profile.persona}</span>
+            <h3 class="font-black text-sm text-zinc-900">${profile.name}</h3>
+            <p class="text-xs text-tinder-pink font-semibold">${profile.role}</p>
+          </div>
+        </div>
+        <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed">${profile.bio}</p>
+        <div class="flex flex-wrap gap-1 mb-4">
+          ${profile.tags.slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${tag}</span>`).join('')}
+        </div>
+      </div>
+      <button onclick="openProfileScreenById('${profile.id}')" class="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+        <span>View Full Portfolio</span>
+        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+      </button>
+    `;
+    grid.appendChild(card);
+  });
+
+  lucide.createIcons();
+}
+
+function openProfileScreenById(id) {
+  const profile = PROFILES.find(p => p.id === id);
+  if (profile) openProfileScreen(profile);
+}
 
 // SOUND SYNTHESIS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -163,12 +228,6 @@ function playBeep(type) {
   } catch (e) {}
 }
 
-// INITIALIZATION
-window.addEventListener('DOMContentLoaded', () => {
-  lucide.createIcons();
-  renderDeck();
-});
-
 // RENDER PROFILE STACK
 function renderDeck() {
   const container = document.getElementById('cardsWrapper');
@@ -196,12 +255,10 @@ function renderDeck() {
     card.setAttribute('data-id', profile.id);
 
     card.innerHTML = `
-      <!-- HERO IMAGE -->
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
         <img src="${profile.image}" alt="${profile.name}" class="w-full h-full object-cover" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
 
-        <!-- STAMPS -->
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">
           HIRE / MATCH
         </div>
@@ -212,7 +269,6 @@ function renderDeck() {
           SUPER LIKE ★
         </div>
 
-        <!-- Top Pill -->
         <div class="absolute top-4 left-4 flex items-center gap-2">
           <span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
@@ -220,7 +276,6 @@ function renderDeck() {
           </span>
         </div>
 
-        <!-- Identity Details -->
         <div class="absolute bottom-3 left-4 right-4 text-white">
           <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
             ${profile.persona}
@@ -236,7 +291,6 @@ function renderDeck() {
         </div>
       </div>
 
-      <!-- CARD BODY -->
       <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none">
         <div class="flex items-center justify-between border-b border-zinc-100 pb-2">
           <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
@@ -247,9 +301,7 @@ function renderDeck() {
           </span>
         </div>
 
-        <p class="text-xs text-zinc-600 leading-relaxed font-normal">
-          ${profile.bio}
-        </p>
+        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${profile.bio}</p>
 
         <div class="flex flex-wrap gap-1.5 pt-1">
           ${profile.tags.map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${t}</span>`).join('')}
@@ -261,7 +313,7 @@ function renderDeck() {
         </div>
 
         <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
-          Click card (without dragging) to view full portfolio &rarr;
+          Click card to open full profile &rarr;
         </div>
       </div>
     `;
@@ -273,7 +325,7 @@ function renderDeck() {
   attachTopCardListeners();
 }
 
-// DRAG & SWIPE EVENT LISTENERS
+// ATTACH DRAG / SWIPE GESTURES
 function attachTopCardListeners() {
   const topCard = document.querySelector('.swipe-card:last-child');
   if (!topCard) return;
@@ -288,7 +340,7 @@ function attachTopCardListeners() {
   window.addEventListener('touchmove', onDragMove, { passive: false });
   window.addEventListener('touchend', onDragEnd);
 
-  // Pure click handler: ONLY triggers if user did not move or swipe
+  // Pure click only (prevents swipes from triggering profile screen)
   topCard.addEventListener('click', (e) => {
     if (hasSwipedOrMoved) {
       e.preventDefault();
@@ -302,7 +354,7 @@ function attachTopCardListeners() {
 function onDragStart(e) {
   if (!activeCardElem) return;
   isDragging = true;
-  hasSwipedOrMoved = false; // Reset gesture flag
+  hasSwipedOrMoved = false;
   activeCardElem.classList.remove('card-transition');
 
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -320,7 +372,6 @@ function onDragMove(e) {
   currentX = clientX - startX;
   currentY = clientY - startY;
 
-  // Flag movement if moved beyond a 6px threshold
   if (Math.abs(currentX) > 6 || Math.abs(currentY) > 6) {
     hasSwipedOrMoved = true;
   }
@@ -365,7 +416,6 @@ function onDragEnd() {
   } else if (currentY < superThreshold) {
     finalizeSwipe('up');
   } else {
-    // Snap back
     activeCardElem.classList.add('card-transition');
     activeCardElem.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
     const stamps = activeCardElem.querySelectorAll('.stamp-like, .stamp-nope, .stamp-super');
@@ -432,7 +482,7 @@ function handleMatchSuccess(profile, isSuper) {
 
   avatar.src = profile.image;
   subtitle.innerHTML = isSuper 
-    ? `🔥 <strong>SUPER LIKE!</strong> You matched directly with <strong>${profile.name}</strong>!`
+    ? `🔥 <strong>SUPER LIKE!</strong> Priority match unlocked with <strong>${profile.name}</strong>!`
     : `You and <strong>${profile.name}</strong> matched! Review projects or connect directly.`;
 
   modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -616,3 +666,7 @@ function copyTeamContact() {
 
   showToast("Copied to Clipboard!", email);
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+});
