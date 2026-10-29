@@ -118,6 +118,7 @@ const PROFILES = [
 let cardsState = [...PROFILES];
 let matchedProfiles = [];
 let isDragging = false;
+let hasSwipedOrMoved = false; // Prevents swipe gesture from triggering click
 let startX = 0;
 let startY = 0;
 let currentX = 0;
@@ -260,7 +261,7 @@ function renderDeck() {
         </div>
 
         <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
-          Tap card to view full portfolio &rarr;
+          Click card (without dragging) to view full portfolio &rarr;
         </div>
       </div>
     `;
@@ -287,17 +288,21 @@ function attachTopCardListeners() {
   window.addEventListener('touchmove', onDragMove, { passive: false });
   window.addEventListener('touchend', onDragEnd);
 
-  // Click to open detailed screen
-  topCard.addEventListener('click', () => {
-    if (Math.abs(currentX) < 10 && Math.abs(currentY) < 10) {
-      openProfileScreen(cardsState[0]);
+  // Pure click handler: ONLY triggers if user did not move or swipe
+  topCard.addEventListener('click', (e) => {
+    if (hasSwipedOrMoved) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
+    openProfileScreen(cardsState[0]);
   });
 }
 
 function onDragStart(e) {
   if (!activeCardElem) return;
   isDragging = true;
+  hasSwipedOrMoved = false; // Reset gesture flag
   activeCardElem.classList.remove('card-transition');
 
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -314,6 +319,11 @@ function onDragMove(e) {
 
   currentX = clientX - startX;
   currentY = clientY - startY;
+
+  // Flag movement if moved beyond a 6px threshold
+  if (Math.abs(currentX) > 6 || Math.abs(currentY) > 6) {
+    hasSwipedOrMoved = true;
+  }
 
   const rotate = currentX * 0.08;
   activeCardElem.style.transform = `translate3d(${currentX}px, ${currentY}px, 0px) rotate(${rotate}deg)`;
@@ -355,6 +365,7 @@ function onDragEnd() {
   } else if (currentY < superThreshold) {
     finalizeSwipe('up');
   } else {
+    // Snap back
     activeCardElem.classList.add('card-transition');
     activeCardElem.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
     const stamps = activeCardElem.querySelectorAll('.stamp-like, .stamp-nope, .stamp-super');
