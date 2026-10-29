@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Golden Arches • Inspired Menu</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mcd: {
+              red: '#DA291C',
+              darkred: '#B71C10',
+              yellow: '#FFC72C',
+              darkyellow: '#E5A817',
+              cream: '#FFF9F0',
+              dark: '#1C1917',
+              gray: '#F5F5F7'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+          },
+          boxShadow: {
+            'soft': '0 8px 30px rgba(0, 0, 0, 0.06)',
+            'hover': '0 18px 40px rgba(218, 41, 28, 0.12)',
+            'golden': '0 10px 25px rgba(255, 199, 44, 0.35)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Smooth custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #fafafa;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e2e8f0;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #cbd5e1;
+    }
+
+    .badge-float {
+      animation: floatBadge 3.5s ease-in-out infinite alternate;
+    }
+    @keyframes floatBadge {
+      0% { transform: translateY(0px); }
+      100% { transform: translateY(-6px); }
+    }
+  </style>
+</head>
+<body class="bg-[#FAFAFA] text-zinc-900 font-sans antialiased min-h-screen flex flex-col selection:bg-mcd-yellow selection:text-mcd-dark">
+
+  <!-- TOP ANNOUNCEMENT BANNER -->
+  <div class="bg-mcd-red text-white py-2 px-4 text-center text-xs sm:text-sm font-semibold tracking-wide flex items-center justify-center gap-2">
+    <span class="inline-block w-2 h-2 rounded-full bg-mcd-yellow animate-ping"></span>
+    <span>Special Offer: Free World Famous Fries with any Order above $20 • Code: <strong class="underline decoration-mcd-yellow decoration-2">GOLDEN20</strong></span>
+  </div>
+
+  <!-- NAVIGATION HEADER -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-zinc-100 transition-all duration-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Brand Logo & Name -->
+      <a href="#" class="flex items-center gap-3 group focus:outline-none">
+        <div class="w-12 h-12 bg-mcd-red rounded-2xl flex items-center justify-center shadow-md shadow-red-200 group-hover:scale-105 transition-transform">
+          <!-- Stylized Golden Arches (M) SVG -->
+          <svg class="w-8 h-8 fill-mcd-yellow drop-shadow-sm" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 90 C 12 40, 32 15, 50 55 C 68 15, 88 40, 88 90 L 76 90 C 76 52, 63 32, 50 68 C 37 32, 24 52, 24 90 Z" />
+          </svg>
+        </div>
+        <div>
+          <span class="text-xl font-extrabold tracking-tight text-zinc-900 flex items-center gap-1">
+            Golden<span class="text-mcd-red">Bites</span>
+          </span>
+          <p class="text-[10px] tracking-wider uppercase font-semibold text-zinc-400">Minimal Inspo Menu</p>
+        </div>
+      </a>
+
+      <!-- Quick Nav Links -->
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-semibold text-zinc-600">
+        <a href="#menu-section" class="hover:text-mcd-red transition-colors">Menu Catalog</a>
+        <a href="#favorites" class="hover:text-mcd-red transition-colors">Classics</a>
+        <a href="#nutrition" class="hover:text-mcd-red transition-colors">Nutrition & Quality</a>
+        <a href="#locations" class="hover:text-mcd-red transition-colors">Find a Drive-Thru</a>
+      </nav>
+
+      <!-- Cart Button & Quick CTA -->
+      <div class="flex items-center gap-3">
+        <button 
+          id="cartBtn" 
+          onclick="toggleCartDrawer(true)"
+          class="relative p-2.5 sm:px-4 sm:py-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200/80 text-zinc-800 font-semibold text-sm transition-all flex items-center gap-2 group focus:ring-2 focus:ring-mcd-yellow focus:outline-none">
+          <i data-lucide="shopping-bag" class="w-5 h-5 text-zinc-700 group-hover:scale-110 transition-transform"></i>
+          <span class="hidden sm:inline">My Bag</span>
+          <span id="cartCountBadge" class="w-6 h-6 rounded-full bg-mcd-red text-white text-xs font-bold flex items-center justify-center">0</span>
+        </button>
+
+        <button 
+          onclick="quickOrderFeatured()"
+          class="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-full bg-mcd-yellow hover:bg-mcd-darkyellow text-zinc-900 font-bold text-sm shadow-golden transition-transform active:scale-95">
+          <span>Order Quick</span>
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="relative overflow-hidden bg-gradient-to-b from-mcd-cream/60 via-white to-[#FAFAFA] pt-12 pb-16 lg:py-20 border-b border-zinc-100">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        
+        <!-- Hero Copy -->
+        <div class="lg:col-span-7 space-y-6 text-center lg:text-left">
+          <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-100 text-mcd-red text-xs font-bold tracking-wide">
+            <span class="flex h-2 w-2 rounded-full bg-mcd-red"></span>
+            ALWAYS FRESH, CRISPY & ICONIC
+          </div>
+          
+          <h1 class="text-4xl sm:text-6xl font-black text-zinc-900 tracking-tight leading-[1.08]">
+            Pure simplicity. <br/>
+            <span class="relative inline-block text-mcd-red">
+              Iconic craving.
+              <svg class="absolute -bottom-2 left-0 w-full" height="8" viewBox="0 0 200 8" fill="none">
+                <path d="M1 5.5C50 1.5 150 1.5 199 5.5" stroke="#FFC72C" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </h1>
+
+          <p class="text-base sm:text-lg text-zinc-600 max-w-xl mx-auto lg:mx-0 font-normal leading-relaxed">
+            Experience timeless comfort food re-imagined with a sharp, minimalist touch. High-grade 100% pure beef, crispy golden fries, and rich creamy desserts made exactly how you love them.
+          </p>
+
+          <!-- Action buttons -->
+          <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
+            <a href="#menu-section" class="w-full sm:w-auto px-8 py-3.5 bg-mcd-red hover:bg-mcd-darkred text-white font-bold rounded-2xl shadow-lg shadow-red-500/25 transition-all text-center flex items-center justify-center gap-2">
+              <span>Explore The Menu</span>
+              <i data-lucide="arrow-down" class="w-4 h-4"></i>
+            </a>
+            <button onclick="addCustomSpecial()" class="w-full sm:w-auto px-7 py-3.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-800 font-semibold rounded-2xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2">
+              <i data-lucide="award" class="w-4 h-4 text-mcd-yellow fill-mcd-yellow"></i>
+              <span>Add Double Burger Combo ($9.99)</span>
+            </button>
+          </div>
+
+          <!-- Feature badges -->
+          <div class="grid grid-cols-3 gap-4 pt-6 border-t border-zinc-200/70 max-w-lg mx-auto lg:mx-0 text-left">
+            <div>
+              <p class="text-xs text-zinc-400 font-semibold uppercase">Beef Quality</p>
+              <p class="font-bold text-zinc-900 text-sm">100% Pure Beef</p>
+            </div>
+            <div>
+              <p class="text-xs text-zinc-400 font-semibold uppercase">Fries</p>
+              <p class="font-bold text-zinc-900 text-sm">Golden & Salty</p>
+            </div>
+            <div>
+              <p class="text-xs text-zinc-400 font-semibold uppercase">Delivery</p>
+              <p class="font-bold text-zinc-900 text-sm">Under 25 Mins</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hero Visual Showcase -->
+        <div class="lg:col-span-5 relative flex justify-center">
+          <div class="w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-gradient-to-tr from-mcd-yellow/20 via-mcd-red/10 to-transparent absolute -z-10 blur-2xl"></div>
+          
+          <div class="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-soft border border-zinc-100 flex flex-col items-center text-center">
+            
+            <div class="absolute -top-3 -right-3 badge-float bg-mcd-yellow text-zinc-900 px-3 py-1 rounded-full text-xs font-black shadow-md uppercase tracking-wider flex items-center gap-1">
+              <i data-lucide="flame" class="w-3.5 h-3.5 fill-zinc-900"></i> Most Loved
+            </div>
+
+            <!-- Big Mac Vector Graphic Illustration -->
+            <div class="w-52 h-52 my-3 flex items-center justify-center">
+              <svg class="w-48 h-48 drop-shadow-xl" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top Bun -->
+                <path d="M40 85 C40 45, 160 45, 160 85 Z" fill="#D97706" />
+                <path d="M45 83 C55 52, 145 52, 155 83 Z" fill="#F59E0B" />
+                <!-- Sesame seeds -->
+                <ellipse cx="75" cy="62" rx="3" ry="1.5" fill="#FEF3C7" transform="rotate(-15 75 62)"/>
+                <ellipse cx="100" cy="55" rx="3" ry="1.5" fill="#FEF3C7"/>
+                <ellipse cx="125" cy="65" rx="3" ry="1.5" fill="#FEF3C7" transform="rotate(20 125 65)"/>
+                <ellipse cx="90" cy="72" rx="3" ry="1.5" fill="#FEF3C7" transform="rotate(-10 90 72)"/>
+                <ellipse cx="115" cy="75" rx="3" ry="1.5" fill="#FEF3C7" transform="rotate(15 115 75)"/>
+                
+                <!-- Cheese 1 -->
+                <polygon points="35,92 165,92 145,104 55,102" fill="#FFC72C" />
+                
+                <!-- Beef Patty 1 -->
+                <rect x="42" y="87" width="116" height="12" rx="6" fill="#5A2E16" />
+                
+                <!-- Center Bun Layer -->
+                <rect x="44" y="103" width="112" height="10" rx="5" fill="#F59E0B" />
+                
+                <!-- Crisp Lettuce & Sauce Splashes -->
+                <path d="M38 116 Q45 110 55 117 Q65 112 75 118 Q85 111 95 117 Q105 112 115 117 Q125 110 135 118 Q145 112 155 117 Q162 112 165 116" stroke="#16A34A" stroke-width="5" stroke-linecap="round"/>
+                
+                <!-- Beef Patty 2 -->
+                <rect x="42" y="122" width="116" height="12" rx="6" fill="#5A2E16" />
+                
+                <!-- Melted Cheese Corner -->
+                <polygon points="50,126 90,126 70,140" fill="#FFC72C" />
+                
+                <!-- Bottom Bun -->
+                <rect x="44" y="137" width="112" height="18" rx="9" fill="#D97706" />
+                <rect x="46" y="138" width="108" height="14" rx="7" fill="#F59E0B" />
+              </svg>
+            </div>
+
+            <div class="mt-2">
+              <h3 class="text-xl font-extrabold text-zinc-900">Grand Double Stack</h3>
+              <p class="text-xs text-zinc-500 mt-1">Two pure beef patties, special sauce, crisp lettuce, melted cheese, pickles, onions on a toasted bun.</p>
+              
+              <div class="mt-4 flex items-center justify-between gap-4">
+                <span class="text-2xl font-black text-zinc-900">$6.49</span>
+                <button onclick="addToCart(1)" class="px-5 py-2 rounded-xl bg-mcd-red hover:bg-mcd-darkred text-white font-bold text-sm shadow-md transition-all active:scale-95 flex items-center gap-1.5">
+                  <i data-lucide="plus" class="w-4 h-4"></i> Add to Bag
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- CATEGORY FILTER PILLS -->
+  <section id="menu-section" class="py-8 bg-white border-b border-zinc-100 sticky top-20 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between gap-4 overflow-x-auto no-scrollbar py-1">
+        
+        <!-- Filter Tabs -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <button onclick="filterCategory('all')" data-cat="all" class="cat-pill active px-5 py-2.5 rounded-full font-bold text-sm transition-all bg-mcd-red text-white shadow-sm flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="layout-grid" class="w-4 h-4"></i> All Favorites
+          </button>
+          <button onclick="filterCategory('burgers')" data-cat="burgers" class="cat-pill px-5 py-2.5 rounded-full font-semibold text-sm transition-all bg-zinc-100 hover:bg-zinc-200/70 text-zinc-700 flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="sandwich" class="w-4 h-4"></i> Burgers & Sandwiches
+          </button>
+          <button onclick="filterCategory('sides')" data-cat="sides" class="cat-pill px-5 py-2.5 rounded-full font-semibold text-sm transition-all bg-zinc-100 hover:bg-zinc-200/70 text-zinc-700 flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="utensils" class="w-4 h-4"></i> Fries & Sides
+          </button>
+          <button onclick="filterCategory('drinks')" data-cat="drinks" class="cat-pill px-5 py-2.5 rounded-full font-semibold text-sm transition-all bg-zinc-100 hover:bg-zinc-200/70 text-zinc-700 flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="coffee" class="w-4 h-4"></i> McCafé & Beverages
+          </button>
+          <button onclick="filterCategory('desserts')" data-cat="desserts" class="cat-pill px-5 py-2.5 rounded-full font-semibold text-sm transition-all bg-zinc-100 hover:bg-zinc-200/70 text-zinc-700 flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="ice-cream" class="w-4 h-4"></i> Sweets & Shakes
+          </button>
+        </div>
+
+        <!-- Quick Search -->
+        <div class="relative min-w-[180px] sm:min-w-[240px]">
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Search menu..." 
+            oninput="handleSearch(this.value)"
+            class="w-full py-2.5 pl-9 pr-4 rounded-full text-xs sm:text-sm bg-zinc-100 border-none focus:ring-2 focus:ring-mcd-yellow focus:bg-white text-zinc-800 placeholder-zinc-400 transition-all outline-none"
+          />
+          <i data-lucide="search" class="w-4 h-4 text-zinc-400 absolute left-3 top-3"></i>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- MENU GRID SECTION -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex-1">
+    
+    <div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+      <div>
+        <p class="text-xs uppercase font-extrabold text-mcd-red tracking-wider">Cravings on Demand</p>
+        <h2 id="currentCategoryTitle" class="text-2xl sm:text-3xl font-extrabold text-zinc-900 tracking-tight">All Classics</h2>
+      </div>
+      <p id="itemCountDisplay" class="text-sm font-medium text-zinc-500">Showing 8 hand-crafted favorites</p>
+    </div>
+
+    <!-- The Product Cards Grid -->
+    <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- Injected via JavaScript -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden py-16 text-center">
+      <div class="w-16 h-16 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto mb-4">
+        <i data-lucide="search-x" class="w-8 h-8"></i>
+      </div>
+      <h3 class="text-lg font-bold text-zinc-800">No delicious items match your search</h3>
+      <p class="text-sm text-zinc-500 mt-1">Try another keyword or reset the category filters.</p>
+      <button onclick="filterCategory('all'); document.getElementById('searchInput').value='';" class="mt-4 px-5 py-2 rounded-xl bg-mcd-red text-white text-xs font-bold hover:bg-mcd-darkred transition-all">
+        Reset Filter
+      </button>
+    </div>
+
+  </main>
+
+  <!-- PROMOTIONAL FOOTER BANNER -->
+  <section class="bg-zinc-900 text-white py-14 border-t border-zinc-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+      <div class="flex flex-col items-center md:items-start space-y-2">
+        <div class="w-10 h-10 rounded-xl bg-mcd-red/20 text-mcd-red flex items-center justify-center mb-1">
+          <i data-lucide="truck" class="w-5 h-5 text-mcd-yellow"></i>
+        </div>
+        <h4 class="font-bold text-lg">McDelivery Express</h4>
+        <p class="text-zinc-400 text-xs leading-relaxed">Hot meals dispatched straight from our nearest kitchen within minutes of order confirmation.</p>
+      </div>
+
+      <div class="flex flex-col items-center md:items-start space-y-2">
+        <div class="w-10 h-10 rounded-xl bg-mcd-yellow/20 text-mcd-yellow flex items-center justify-center mb-1">
+          <i data-lucide="shield-check" class="w-5 h-5 text-mcd-yellow"></i>
+        </div>
+        <h4 class="font-bold text-lg">Uncompromising Quality</h4>
+        <p class="text-zinc-400 text-xs leading-relaxed">Made with grade-A farm potatoes, real creamy dairy, and pure 100% seasoned beef patties.</p>
+      </div>
+
+      <div class="flex flex-col items-center md:items-start space-y-2">
+        <div class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center mb-1">
+          <i data-lucide="gift" class="w-5 h-5 text-mcd-red"></i>
+        </div>
+        <h4 class="font-bold text-lg">Arches Rewards</h4>
+        <p class="text-zinc-400 text-xs leading-relaxed">Collect 100 points per $1 spent and redeem free burgers, crispy nuggets, and shakes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MINIMAL FOOTER -->
+  <footer class="bg-zinc-950 text-zinc-500 text-xs py-8 border-t border-zinc-900">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center space-x-2">
+        <div class="w-6 h-6 rounded-md bg-mcd-red flex items-center justify-center">
+          <span class="text-mcd-yellow font-black text-xs leading-none">M</span>
+        </div>
+        <p class="text-zinc-400">© 2026 Golden Bites Minimalist Project. All Rights Reserved.</p>
+      </div>
+      <div class="flex space-x-6">
+        <a href="#" class="hover:text-white transition-colors">Privacy Policy</a>
+        <a href="#" class="hover:text-white transition-colors">Terms of Service</a>
+        <a href="#" class="hover:text-white transition-colors">Nutritional Calculator</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SLIDE-OVER CART DRAWER -->
+  <div id="cartBackdrop" onclick="toggleCartDrawer(false)" class="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+  <aside id="cartDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-white z-50 shadow-2xl translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+    <!-- Drawer Header -->
+    <div class="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-mcd-red flex items-center justify-center text-white">
+          <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-extrabold text-zinc-900">Your Order Bag</h3>
+          <p id="drawerItemCount" class="text-xs text-zinc-500">0 items selected</p>
+        </div>
+      </div>
+      <button onclick="toggleCartDrawer(false)" class="w-8 h-8 rounded-full bg-zinc-200/70 hover:bg-zinc-200 flex items-center justify-center text-zinc-600 transition-colors">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Drawer Items List -->
+    <div id="cartItemsList" class="flex-1 overflow-y-auto p-6 space-y-4">
+      <!-- Items dynamically populated -->
+    </div>
+
+    <!-- Drawer Footer / Summary -->
+    <div class="p-6 border-t border-zinc-100 bg-zinc-50/70 space-y-3">
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between text-zinc-500">
+          <span>Subtotal</span>
+          <span id="cartSubtotal" class="font-semibold text-zinc-800">$0.00</span>
+        </div>
+        <div class="flex justify-between text-zinc-500">
+          <span>Estimated Tax & Delivery</span>
+          <span id="cartTax" class="font-semibold text-zinc-800">$0.00</span>
+        </div>
+        <div class="flex justify-between text-base font-black text-zinc-900 pt-2 border-t border-zinc-200">
+          <span>Total</span>
+          <span id="cartTotal" class="text-mcd-red">$0.00</span>
+        </div>
+      </div>
+
+      <button id="checkoutButton" onclick="triggerCheckout()" class="w-full py-3.5 bg-mcd-red hover:bg-mcd-darkred active:scale-98 text-white font-bold rounded-2xl shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-2">
+        <span>Proceed to Checkout</span>
+        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+      </button>
+      <p class="text-[11px] text-zinc-400 text-center flex items-center justify-center gap-1">
+        <i data-lucide="lock" class="w-3 h-3"></i> Encrypted contactless fast pay
+      </p>
+    </div>
+  </aside>
+
+  <!-- INTERACTIVE TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 bg-zinc-900 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="w-7 h-7 rounded-full bg-mcd-yellow flex items-center justify-center text-zinc-900">
+      <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+    </div>
+    <div class="text-xs">
+      <p id="toastTitle" class="font-bold">Item Added</p>
+      <p id="toastSubtitle" class="text-zinc-400">Added to your bag</p>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // PRODUCT DATA MODEL (Clean McDonald's inspired staples)
+    const PRODUCTS = [
+      {
+        id: 1,
+        title: "Grand Double Stack",
+        category: "burgers",
+        price: 6.49,
+        calories: "550 kcal",
+        tag: "Iconic",
+        description: "Two 100% pure beef patties, creamy secret sauce, crisp lettuce, melted American cheese, and pickles.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <path d="M25 50 C25 25, 95 25, 95 50 Z" fill="#F59E0B" />
+            <ellipse cx="45" cy="36" rx="2" ry="1" fill="#FEF3C7"/>
+            <ellipse cx="60" cy="32" rx="2" ry="1" fill="#FEF3C7"/>
+            <ellipse cx="75" cy="38" rx="2" ry="1" fill="#FEF3C7"/>
+            <polygon points="22,55 98,55 85,62 35,61" fill="#FFC72C" />
+            <rect x="26" y="52" width="68" height="8" rx="4" fill="#5A2E16" />
+            <rect x="28" y="62" width="64" height="6" rx="3" fill="#D97706" />
+            <path d="M24 70 Q35 65 45 70 Q55 65 65 70 Q75 65 85 70 Q95 65 96 70" stroke="#16A34A" stroke-width="4" stroke-linecap="round"/>
+            <rect x="26" y="73" width="68" height="8" rx="4" fill="#5A2E16" />
+            <rect x="27" y="83" width="66" height="11" rx="5.5" fill="#F59E0B" />
+          </svg>
+        `
+      },
+      {
+        id: 2,
+        title: "Golden Crispy Fries",
+        category: "sides",
+        price: 3.29,
+        calories: "320 kcal",
+        tag: "World Famous",
+        description: "Crispy and golden on the outside, fluffy on the inside. Salted to perfection.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <!-- Fries sticks -->
+            <rect x="42" y="16" width="6" height="45" rx="2" fill="#FFC72C" transform="rotate(-8 42 16)" />
+            <rect x="52" y="12" width="6" height="50" rx="2" fill="#FFD147" />
+            <rect x="62" y="15" width="6" height="46" rx="2" fill="#FFC72C" transform="rotate(7 62 15)" />
+            <rect x="36" y="24" width="5.5" height="38" rx="2" fill="#F59E0B" transform="rotate(-15 36 24)" />
+            <rect x="72" y="22" width="5.5" height="40" rx="2" fill="#F59E0B" transform="rotate(14 72 22)" />
+            <rect x="48" y="20" width="5.5" height="42" rx="2" fill="#FFE082" />
+            <!-- Red Fry Box -->
+            <path d="M30 50 L38 98 C38 102, 82 102, 82 98 L90 50 Z" fill="#DA291C" />
+            <!-- Yellow Arches Emblem on Fry Box -->
+            <path d="M52 75 C 52 64, 56 60, 60 67 C 64 60, 68 64, 68 75" stroke="#FFC72C" stroke-width="3" stroke-linecap="round" fill="none"/>
+          </svg>
+        `
+      },
+      {
+        id: 3,
+        title: "Crispy McNuggets (10pc)",
+        category: "sides",
+        price: 5.99,
+        calories: "410 kcal",
+        tag: "Crispy Dip",
+        description: "Tender, juicy white-meat chicken breaded and fried to crisp perfection. Includes sweet & sour dip.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <!-- Nugget Shapes -->
+            <path d="M30 45 C30 35, 52 35, 54 45 C56 55, 42 65, 32 58 Z" fill="#D97706" />
+            <path d="M32 44 C32 37, 50 37, 51 44 C53 52, 40 60, 33 55 Z" fill="#F59E0B" />
+            
+            <path d="M60 40 C72 32, 88 42, 82 54 C78 64, 62 60, 58 50 Z" fill="#D97706" />
+            <path d="M62 42 C71 35, 84 43, 79 52 C76 60, 63 56, 60 48 Z" fill="#F59E0B" />
+
+            <path d="M42 62 C55 52, 75 60, 72 75 C70 85, 48 88, 38 78 Z" fill="#D97706" />
+            <path d="M44 64 C54 55, 71 62, 69 73 C67 81, 49 84, 41 75 Z" fill="#F59E0B" />
+
+            <!-- Sauce Cup -->
+            <rect x="74" y="74" width="26" height="18" rx="4" fill="#DA291C" />
+            <ellipse cx="87" cy="74" rx="13" ry="4" fill="#991B1B" />
+          </svg>
+        `
+      },
+      {
+        id: 4,
+        title: "Vanilla Swirl McFlurry",
+        category: "desserts",
+        price: 3.89,
+        calories: "510 kcal",
+        tag: "Sweet Chill",
+        description: "Creamy soft serve whipped with crunchy chocolate cookie crumbles and cocoa swirls.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <!-- Cup -->
+            <path d="M35 48 L44 100 C44 102, 76 102, 76 100 L85 48 Z" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+            <path d="M34 48 L86 48 L84 55 L36 55 Z" fill="#DA291C" />
+            <!-- Soft serve swirl -->
+            <path d="M42 48 C42 32, 50 25, 60 22 C70 25, 78 32, 78 48 Z" fill="#FFF" />
+            <path d="M48 48 C48 36, 54 30, 60 28 C66 30, 72 36, 72 48 Z" fill="#FFF9F0" />
+            <!-- Cookie crumbles -->
+            <circle cx="52" cy="38" r="2.5" fill="#3E2723" />
+            <circle cx="65" cy="35" r="2" fill="#3E2723" />
+            <circle cx="58" cy="44" r="2.5" fill="#3E2723" />
+            <circle cx="68" cy="46" r="1.8" fill="#3E2723" />
+            <!-- Mixing Spoon sticking out -->
+            <rect x="64" y="10" width="7" height="32" rx="2" fill="#38BDF8" transform="rotate(15 64 10)" />
+          </svg>
+        `
+      },
+      {
+        id: 5,
+        title: "Classic Cheeseburger",
+        category: "burgers",
+        price: 3.19,
+        calories: "300 kcal",
+        tag: "Classic",
+        description: "Pure beef patty lightly seasoned with salt and pepper, tangy pickles, minced onions, and ketchup.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <path d="M28 54 C28 35, 92 35, 92 54 Z" fill="#F59E0B" />
+            <polygon points="26,62 94,62 78,72 40,70" fill="#FFC72C" />
+            <rect x="29" y="58" width="62" height="7" rx="3.5" fill="#5A2E16" />
+            <rect x="28" y="70" width="64" height="10" rx="5" fill="#F59E0B" />
+          </svg>
+        `
+      },
+      {
+        id: 6,
+        title: "Iced McCafé Caramel",
+        category: "drinks",
+        price: 3.49,
+        calories: "190 kcal",
+        tag: "Chilled",
+        description: "Dark roasted espresso blended with cold milk, premium caramel syrup, poured over ice.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <!-- Clear cup -->
+            <path d="M38 35 L45 98 C45 101, 75 101, 75 98 L82 35 Z" fill="#E0F2FE" opacity="0.8"/>
+            <path d="M42 46 L46 95 C46 97, 74 97, 74 95 L78 46 Z" fill="#78350F" />
+            <rect x="36" y="32" width="48" height="5" rx="2.5" fill="#BAE6FD" />
+            <!-- Straw -->
+            <rect x="62" y="10" width="5" height="50" rx="2" fill="#DA291C" transform="rotate(10 62 10)"/>
+            <!-- Caramel swirl ribbon -->
+            <path d="M46 58 Q60 62 74 58" stroke="#D97706" stroke-width="3" fill="none"/>
+            <path d="M48 74 Q60 78 72 74" stroke="#D97706" stroke-width="3" fill="none"/>
+          </svg>
+        `
+      },
+      {
+        id: 7,
+        title: "Warm Baked Apple Pie",
+        category: "desserts",
+        price: 2.19,
+        calories: "230 kcal",
+        tag: "Oven Baked",
+        description: "Crispy lattice pastry crust pocket loaded with tender spiced apples and real cinnamon sugar.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <rect x="30" y="44" width="60" height="32" rx="10" fill="#D97706" />
+            <rect x="32" y="46" width="56" height="28" rx="8" fill="#F59E0B" />
+            <!-- Lattice cuts -->
+            <line x1="45" y1="52" x2="48" y2="68" stroke="#B45309" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="58" y1="52" x2="61" y2="68" stroke="#B45309" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="71" y1="52" x2="74" y2="68" stroke="#B45309" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        `
+      },
+      {
+        id: 8,
+        title: "Fountain Classic Cola",
+        category: "drinks",
+        price: 1.99,
+        calories: "150 kcal",
+        tag: "Chilled",
+        description: "Ice-cold fountain drink served with crushed ice. Crisp, bubbly, and thirst-quenching.",
+        svg: `
+          <svg class="w-28 h-28 mx-auto" viewBox="0 0 120 120" fill="none">
+            <path d="M38 35 L44 98 C44 101, 76 101, 76 98 L82 35 Z" fill="#DA291C" />
+            <ellipse cx="60" cy="35" rx="22" ry="4" fill="#F8FAFC" />
+            <!-- Straw -->
+            <rect x="58" y="12" width="5" height="30" rx="2" fill="#FFC72C" transform="rotate(-8 58 12)"/>
+            <!-- Golden M on drink -->
+            <path d="M52 68 C 52 60, 56 56, 60 62 C 64 56, 68 60, 68 68" stroke="#FFC72C" stroke-width="3" stroke-linecap="round" fill="none"/>
+          </svg>
+        `
+      }
+    ];
+
+    // CART STATE
+    let cart = [];
+    let activeFilter = 'all';
+    let searchQuery = '';
+
+    // Initialize application on load
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      renderProducts();
+    });
+
+    // Render Product Cards Grid
+    function renderProducts() {
+      const grid = document.getElementById('productGrid');
+      const emptyState = document.getElementById('emptyState');
+      const counterText = document.getElementById('itemCountDisplay');
+      
+      grid.innerHTML = '';
+
+      const filtered = PRODUCTS.filter(item => {
+        const matchesCategory = (activeFilter === 'all') || (item.category === activeFilter);
+        const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              item.description.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesSearch;
+      });
+
+      counterText.textContent = `Showing ${filtered.length} curated favorite${filtered.length === 1 ? '' : 's'}`;
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+        grid.classList.add('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        grid.classList.remove('hidden');
+
+        filtered.forEach(product => {
+          const card = document.createElement('div');
+          card.className = "group bg-white rounded-3xl p-5 border border-zinc-100 hover:border-zinc-200 shadow-soft hover:shadow-hover transition-all duration-300 flex flex-col justify-between";
+          
+          card.innerHTML = `
+            <div>
+              <div class="relative bg-zinc-50 rounded-2xl p-4 flex items-center justify-center overflow-hidden mb-4 group-hover:bg-amber-50/40 transition-colors">
+                <span class="absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white text-zinc-700 shadow-xs uppercase tracking-wider">
+                  ${product.tag}
+                </span>
+                <span class="absolute top-3 right-3 text-[11px] font-semibold text-zinc-400">
+                  ${product.calories}
+                </span>
+                <div class="transform group-hover:scale-105 transition-transform duration-300">
+                  ${product.svg}
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <h3 class="font-bold text-zinc-900 text-base group-hover:text-mcd-red transition-colors">${product.title}</h3>
+                <p class="text-xs text-zinc-500 line-clamp-2 leading-relaxed">${product.description}</p>
+              </div>
+            </div>
+
+            <div class="pt-5 mt-4 border-t border-zinc-100 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-zinc-400 font-semibold block leading-none">Price</span>
+                <span class="text-lg font-black text-zinc-900">$${product.price.toFixed(2)}</span>
+              </div>
+              <button 
+                onclick="addToCart(${product.id})" 
+                class="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-mcd-red active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add</span>
+              </button>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+
+        lucide.createIcons();
+      }
+    }
+
+    // Category Filter Handler
+    function filterCategory(cat) {
+      activeFilter = cat;
+      
+      // Update Tab Pill styles
+      document.querySelectorAll('.cat-pill').forEach(btn => {
+        if (btn.getAttribute('data-cat') === cat) {
+          btn.className = "cat-pill active px-5 py-2.5 rounded-full font-bold text-sm transition-all bg-mcd-red text-white shadow-sm flex items-center gap-2 whitespace-nowrap";
+        } else {
+          btn.className = "cat-pill px-5 py-2.5 rounded-full font-semibold text-sm transition-all bg-zinc-100 hover:bg-zinc-200/70 text-zinc-700 flex items-center gap-2 whitespace-nowrap";
+        }
+      });
+
+      // Update Section Header
+      const titles = {
+        all: "All Classics",
+        burgers: "Signature Burgers & Sandwiches",
+        sides: "Crispy World-Famous Sides",
+        drinks: "Chilled Drinks & McCafé",
+        desserts: "Classic Sweets & Ice Cream"
+      };
+      document.getElementById('currentCategoryTitle').textContent = titles[cat] || "Menu Catalog";
+
+      renderProducts();
+    }
+
+    // Search query filter
+    function handleSearch(val) {
+      searchQuery = val;
+      renderProducts();
+    }
+
+    // Add To Cart logic
+    function addToCart(productId) {
+      const item = PRODUCTS.find(p => p.id === productId);
+      if (!item) return;
+
+      const existing = cart.find(ci => ci.id === productId);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({ ...item, qty: 1 });
+      }
+
+      updateCartUI();
+      showToast(item.title, "Added to your bag");
+    }
+
+    // Modify Item Quantity in Cart
+    function changeQty(productId, delta) {
+      const itemIndex = cart.findIndex(ci => ci.id === productId);
+      if (itemIndex > -1) {
+        cart[itemIndex].qty += delta;
+        if (cart[itemIndex].qty <= 0) {
+          cart.splice(itemIndex, 1);
+        }
+      }
+      updateCartUI();
+    }
+
+    // Update Drawer UI and Badge counts
+    function updateCartUI() {
+      const totalCount = cart.reduce((acc, curr) => acc + curr.qty, 0);
+      const subtotal = cart.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+      const taxAndDelivery = totalCount > 0 ? (subtotal * 0.08 + 1.99) : 0;
+      const total = subtotal + taxAndDelivery;
+
+      // Update Badges & Counters
+      document.getElementById('cartCountBadge').textContent = totalCount;
+      document.getElementById('drawerItemCount').textContent = `${totalCount} item${totalCount === 1 ? '' : 's'} selected`;
+      document.getElementById('cartSubtotal').textContent = `$${subtotal.toFixed(2)}`;
+      document.getElementById('cartTax').textContent = totalCount > 0 ? `$${taxAndDelivery.toFixed(2)}` : '$0.00';
+      document.getElementById('cartTotal').textContent = `$${total.toFixed(2)}`;
+
+      // Render Drawer Items
+      const listContainer = document.getElementById('cartItemsList');
+      listContainer.innerHTML = '';
+
+      if (cart.length === 0) {
+        listContainer.innerHTML = `
+          <div class="h-64 flex flex-col items-center justify-center text-center">
+            <div class="w-16 h-16 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center mb-3">
+              <i data-lucide="shopping-bag" class="w-7 h-7"></i>
+            </div>
+            <p class="font-bold text-zinc-800 text-sm">Your bag is currently empty</p>
+            <p class="text-xs text-zinc-400 mt-1">Add some hot crispy fries or a classic double burger!</p>
+          </div>
+        `;
+      } else {
+        cart.forEach(item => {
+          const itemRow = document.createElement('div');
+          itemRow.className = "flex items-center justify-between gap-3 p-3 bg-zinc-50 rounded-2xl border border-zinc-100";
+          itemRow.innerHTML = `
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center p-1 border border-zinc-100">
+                ${item.svg}
+              </div>
+              <div>
+                <h4 class="font-bold text-xs text-zinc-900">${item.title}</h4>
+                <p class="text-[11px] text-zinc-400">$${item.price.toFixed(2)} each</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="flex items-center bg-white rounded-lg border border-zinc-200 px-1 py-0.5">
+                <button onclick="changeQty(${item.id}, -1)" class="w-6 h-6 flex items-center justify-center text-zinc-600 hover:text-mcd-red text-xs font-bold">-</button>
+                <span class="text-xs font-bold px-1.5">${item.qty}</span>
+                <button onclick="changeQty(${item.id}, 1)" class="w-6 h-6 flex items-center justify-center text-zinc-600 hover:text-mcd-red text-xs font-bold">+</button>
+              </div>
+              <span class="text-xs font-bold text-zinc-800 min-w-[42px] text-right">
+                $${(item.price * item.qty).toFixed(2)}
+              </span>
+            </div>
+          `;
+          listContainer.appendChild(itemRow);
+        });
+      }
+
+      lucide.createIcons();
+    }
+
+    // Toggle Drawer Visibility
+    function toggleCartDrawer(open) {
+      const drawer = document.getElementById('cartDrawer');
+      const backdrop = document.getElementById('cartBackdrop');
+
+      if (open) {
+        backdrop.classList.remove('pointer-events-none', 'opacity-0');
+        backdrop.classList.add('opacity-100');
+        drawer.classList.remove('translate-x-full');
+      } else {
+        backdrop.classList.add('opacity-0', 'pointer-events-none');
+        backdrop.classList.remove('opacity-100');
+        drawer.classList.add('translate-x-full');
+      }
+    }
+
+    // Show temporary feedback notification toast
+    function showToast(title, subtitle) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastSubtitle').textContent = subtitle;
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2400);
+    }
+
+    // Quick Action helper
+    function quickOrderFeatured() {
+      addToCart(1); // Double burger
+      addToCart(2); // Fries
+      toggleCartDrawer(true);
+    }
+
+    function addCustomSpecial() {
+      addToCart(1);
+      addToCart(2);
+      addToCart(8);
+      toggleCartDrawer(true);
+      showToast("Combo Special Added", "Double Stack + Fries + Cola");
+    }
+
+    // Checkout demo flow
+    function triggerCheckout() {
+      if (cart.length === 0) {
+        showToast("Bag is Empty", "Add some favorites first!");
+        return;
+      }
+      
+      const btn = document.getElementById('checkoutButton');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = `<span class="inline-block animate-spin mr-2">⏳</span> Processing Order...`;
+      btn.disabled = true;
+
+      setTimeout(() => {
+        cart = [];
+        updateCartUI();
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        toggleCartDrawer(false);
+        showToast("Order Placed!", "Your hot meal is being prepared!");
+      }, 1500);
+    }
+  </script>
+</body>
+</html>
