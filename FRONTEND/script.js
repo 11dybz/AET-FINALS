@@ -1,3 +1,20 @@
+const API_BASE = 'http://localhost:8080/api';
+
+async function fetchBackendProfiles() {
+  try {
+    const response = await fetch(`${API_BASE}/profiles`, { credentials: 'include' });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length > 0) {
+        // Map backend response fields to your UI cards if needed
+        console.log("Connected to backend profiles successfully!", data);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to connect to backend:", err);
+  }
+}
+
 // 4 SPECIFIED TEAM MEMBERS DATA MODEL
 const PROFILES = [
   {
@@ -684,4 +701,5 @@ window.addEventListener('DOMContentLoaded', () => {
   let mode = null;
   try { mode = sessionStorage.getItem('pitchrMode'); } catch (e) {}
   if (mode === 'swipe' || mode === 'directory') startMode(mode);
+  await fetchBackendProfiles();
 });
