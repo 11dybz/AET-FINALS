@@ -695,11 +695,23 @@ function copyTeamContact() {
   showToast("Copied to Clipboard!", email);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
-  // Returning from a profile page: reopen the view the visitor came from
+
+  // 1. Initialize or resume session with backend safely inside an async function
+  try {
+    await apiCall('/session', 'POST');
+  } catch (err) {
+    console.error("Session init error:", err);
+  }
+
+  // 2. Load mode state
   let mode = null;
-  try { mode = sessionStorage.getItem('pitchrMode'); } catch (e) {}
-  if (mode === 'swipe' || mode === 'directory') startMode(mode);
-  await fetchBackendProfiles();
+  try {
+    mode = sessionStorage.getItem('pitchrMode');
+  } catch (e) {}
+
+  if (mode === 'swipe' || mode === 'directory') {
+    startMode(mode);
+  }
 });
