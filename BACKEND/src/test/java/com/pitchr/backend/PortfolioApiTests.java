@@ -27,6 +27,36 @@ class PortfolioApiTests {
     private final JsonMapper json = new JsonMapper();
 
     @Test
+    void homepageMemberPagesAndAssetsAreServed() throws Exception {
+        for (String path : List.of("/", "/index.html", "/CHEE.html", "/DAPOG.html",
+                "/FONTELAR.html", "/VILLANUEVA.html", "/style.css", "/script.js",
+                "/images/chee.jpg", "/images/greg.jpg", "/images/dave.jpg", "/images/justin-placeholder.svg")) {
+            var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(response.statusCode()).as(path).isEqualTo(200);
+            assertThat(response.body()).as(path).isNotEmpty();
+            if (path.equals("/")) {
+                assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("text/html");
+                assertThat(new String(response.body(), java.nio.charset.StandardCharsets.UTF_8)).contains("homeScreen");
+            }
+        }
+        for (String path : List.of("/.env", "/pom.xml", "/api/missing")) {
+            var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).build(),
+                HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).as(path).isEqualTo(404);
+        }
+    }
+
+    @Test
+    void apiBaseListsTheAvailableRoutes() throws Exception {
+        for (String path : List.of("", "/")) {
+            var response = request("GET", path, null, null);
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(body(response).get("endpoints").get("profiles").asString()).isEqualTo("GET /api/profiles");
+        }
+    }
+
+    @Test
     void seededProfilesMatchTheFrontendContract() throws Exception {
         var response = request("GET", "/profiles", null, null);
         assertThat(response.statusCode()).isEqualTo(200);

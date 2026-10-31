@@ -1,4 +1,26 @@
-const API_BASE = 'http://localhost:8080/api';
+// Use the page's server, including its current port. A separate frontend server
+// can set window.PITCHR_API_BASE before loading this script.
+const API_BASE = (window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
+
+async function apiCall(path, method = 'GET', data) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method,
+      credentials: 'include',
+      signal: controller.signal,
+      ...(data === undefined ? {} : {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+    });
+    if (!response.ok) throw new Error(`Backend request failed (${response.status})`);
+    return response.status === 204 ? null : await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function fetchBackendProfiles() {
   try {
@@ -112,7 +134,7 @@ const PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Frontend & UI/UX Developer",
-    image: "images/justin.jpg",
+    image: "images/justin-placeholder.svg",
     verified: true,
     matchPercentage: "96% Match",
     bio: "Translates complex workflows into fluid swipe decks, intuitive layouts, and mobile-responsive animations.",
@@ -139,6 +161,7 @@ const PROFILES = [
 let cardsState = [...PROFILES];
 let matchedProfiles = [];
 let isDragging = false;
+let isSwiping = false;
 let hasSwipedOrMoved = false;
 let startX = 0;
 let startY = 0;
@@ -256,6 +279,7 @@ function renderDeck() {
   const container = document.getElementById('cardsWrapper');
   const emptyDeck = document.getElementById('emptyDeck');
   container.innerHTML = '';
+  activeCardElem = null;
 
   if (cardsState.length === 0) {
     emptyDeck.classList.remove('hidden');
@@ -375,7 +399,7 @@ function attachTopCardListeners() {
 }
 
 function onDragStart(e) {
-  if (!activeCardElem) return;
+  if (!activeCardElem || isSwiping) return;
   isDragging = true;
   hasSwipedOrMoved = false;
   activeCardElem.classList.remove('card-transition');
@@ -455,7 +479,10 @@ function triggerSwipeAction(direction) {
 }
 
 function finalizeSwipe(direction) {
-  if (!activeCardElem) return;
+  if (!activeCardElem || cardsState.length === 0 || isSwiping) return;
+  isSwiping = true;
+  hasSwipedOrMoved = true;
+  isDragging = false;
 
   const card = activeCardElem;
   const swipedProfile = cardsState[0];
@@ -480,6 +507,7 @@ function finalizeSwipe(direction) {
 
   setTimeout(() => {
     cardsState.shift();
+    isSwiping = false;
     renderDeck();
   }, 300);
 }
@@ -645,6 +673,7 @@ function updateMatchesUI() {
 }
 
 function resetDeck() {
+  if (isSwiping) return;
   cardsState = [...PROFILES];
   renderDeck();
   showToast("Deck Reloaded", "Start swiping fresh!");
@@ -697,12 +726,14 @@ function copyTeamContact() {
 
 window.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
+  updateMatchesUI();
 
   // 1. Initialize or resume session with backend safely inside an async function
   try {
     await apiCall('/session', 'POST');
   } catch (err) {
     console.error("Session init error:", err);
+    showToast('Backend unavailable', 'You can still explore the team.');
   }
 
   // 2. Load mode state

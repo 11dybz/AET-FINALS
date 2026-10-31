@@ -25,6 +25,17 @@ public class PortfolioController {
         this.secureCookie = secureCookie;
     }
 
+    @GetMapping({"", "/"})
+    public Map<String, Object> index() {
+        return Map.of("name", "pitchr.", "endpoints", Map.of(
+            "profiles", "GET /api/profiles",
+            "profile", "GET /api/profiles/{id}",
+            "session", "POST /api/session",
+            "matches", "GET /api/me/matches",
+            "swipe", "PUT /api/me/swipes/{profileId}",
+            "team", "GET /api/team"));
+    }
+
     @GetMapping("/profiles")
     public List<ProfileResponse> profiles() { return service.profiles(); }
 

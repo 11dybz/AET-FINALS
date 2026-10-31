@@ -11,7 +11,7 @@ cd BACKEND
 .\mvnw.cmd spring-boot:run
 ```
 
-Java 17 or newer must be installed. The wrapper downloads Maven and dependencies on the first run. The API runs at `http://localhost:8080/api`. There is no HTML landing page at `/`.
+Java 17 or newer must be installed. The wrapper downloads Maven and dependencies on the first run. Open `http://localhost:8080/` for the team portfolio; `http://localhost:8080/api` lists the API routes. The build bundles the sibling `FRONTEND` folder, including member pages, scripts, styles, and images. Rebuild/restart after frontend changes so the running app uses the updated files.
 
 ```powershell
 # Run integration tests against isolated H2 and PostgreSQL databases
@@ -99,7 +99,9 @@ Invoke-RestMethod "$base/me/matches" -WebSession $visitor
 
 ## Frontend connection
 
-The existing FRONTEND files are still standalone and have not been changed. To connect them:
+Spring Boot serves the homepage at `/`, all four member portfolio pages, and the frontend assets. The frontend uses `/api` on the same origin, so it follows the backend's current port automatically. Session initialization uses the shared request helper and shows a message if the backend is unavailable.
+
+The profile cards and matches still use the frontend's in-memory data. To complete their database integration:
 
 1. Load `/api/profiles` into `PROFILES` and `cardsState` during initialization.
 2. POST `/api/session`, then load `/api/me/matches` and call `updateMatchesUI()`.
@@ -110,7 +112,7 @@ The existing FRONTEND files are still standalone and have not been changed. To c
 Use `credentials: 'include'` on API calls so the browser sends the session cookie:
 
 ```javascript
-const API = 'http://localhost:8080/api';
+const API = '/api';
 await fetch(`${API}/session`, { method: 'POST', credentials: 'include' });
 const response = await fetch(`${API}/me/swipes/chee-reynaldo`, {
   method: 'PUT',
@@ -121,7 +123,9 @@ const response = await fetch(`${API}/me/swipes/chee-reynaldo`, {
 if (!response.ok) throw new Error('Could not save swipe');
 ```
 
-Serve FRONTEND over HTTP (for example a local editor server on port 5500); opening `index.html` as a file is not supported by the API's origin policy. Use `localhost` for both servers, or `127.0.0.1` for both, so SameSite cookies work. The default allowed frontend origins are `http://localhost:5500` and `http://127.0.0.1:5500`.
+Open the app through Spring Boot, for example `http://localhost:8081/` when using the Supabase command above. For a separate frontend development server, set `window.PITCHR_API_BASE = 'http://localhost:8081/api'` in a script before loading `script.js`. Use `localhost` for both servers, or `127.0.0.1` for both, so SameSite cookies work. The default allowed separate frontend origins are `http://localhost:5500` and `http://127.0.0.1:5500`. Opening `index.html` as a file is not supported by the API's origin policy.
+
+Run the frontend startup and swipe regression checks from the repository root with `node --test FRONTEND/tests/app.test.cjs`.
 
 ## Configuration
 
