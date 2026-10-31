@@ -48,6 +48,19 @@ class PortfolioApiTests {
     }
 
     @Test
+    void updatedStaticFilesAreNotHiddenByBrowserCache() throws Exception {
+        for (String path : List.of("/", "/CHEE.html", "/script.js", "/images/greg.jpg")) {
+            var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                    .header("If-Modified-Since", "Fri, 01 Feb 1980 00:00:00 GMT").build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(response.statusCode()).as(path).isEqualTo(200);
+            assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+            assertThat(response.headers().firstValue("Last-Modified")).isEmpty();
+            assertThat(response.body()).isNotEmpty();
+        }
+    }
+
+    @Test
     void apiBaseListsTheAvailableRoutes() throws Exception {
         for (String path : List.of("", "/")) {
             var response = request("GET", path, null, null);
