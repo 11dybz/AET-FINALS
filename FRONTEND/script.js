@@ -134,7 +134,7 @@ const PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Frontend & UI/UX Developer",
-    image: "images/justin-placeholder.svg",
+    image: "images/justin.jpg",
     verified: true,
     matchPercentage: "96% Match",
     bio: "Translates complex workflows into fluid swipe decks, intuitive layouts, and mobile-responsive animations.",
