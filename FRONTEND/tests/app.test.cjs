@@ -22,12 +22,15 @@ function app(options = {}) {
     window: { PITCHR_API_BASE: options.base, AudioContext: function () {},
       addEventListener(name, callback) { listeners[name] = callback; } },
     document: {
+      addEventListener() {},
+      hidden: false,
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, element());
         return elements.get(id);
       },
       createElement: element,
-      querySelector: () => null
+      querySelector: () => null,
+      querySelectorAll: () => []
     },
     sessionStorage: { getItem: () => null },
     lucide: { createIcons() {} },
@@ -52,7 +55,7 @@ function app(options = {}) {
     }
   });
   vm.runInContext(source, context);
-  return { context, listeners, windowListeners, requests, timers, elements, document };
+  return { context, listeners, windowListeners, requests, timers, elements, document: context.document };
 }
 
 const sampleProfile = {
@@ -96,6 +99,7 @@ test('startup displays a read-only fallback notice when the backend is unavailab
 test('rapid swipe input and rewind cannot remove more than one card during an animation', () => {
   const state = app();
   vm.runInContext(`
+    editorImages = [{id:3},{id:1},{id:2}];
     playBeep = () => {};
     showToast = () => {};
     renderDeck = () => { activeCardElem = null; };
@@ -110,7 +114,11 @@ test('rapid swipe input and rewind cannot remove more than one card during an an
 test('gallery navigation clamps indexes and updates the image counter', () => {
   const state = app();
   let scrollLeft = 0;
-  const track = { clientWidth: 320, scrollTo(options) { scrollLeft = options.left; } };
+  const track = {
+    clientWidth: 320,
+    children: [{ style: {} }, { style: {} }, { style: {} }],
+    scrollTo(options) { scrollLeft = options.left; }
+  };
   const gallery = { dataset: { images: JSON.stringify(['/api/images/1', '/api/images/2', '/api/images/3']) } };
   const counter = { textContent: '' };
   state.document.getElementById = id => ({

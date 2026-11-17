@@ -11,12 +11,17 @@ import java.net.URI;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -26,27 +31,30 @@ public class PortfolioService {
     private final ProfileRepository profiles;
     private final SessionRepository sessions;
     private final SwipeRepository swipes;
+    private final ProfileImageRepository images;
+    private final ProfileImageBlobRepository imageBlobs;
+    private final MessageRepository messages;
     private final int sessionDays;
     private final Map<String, Deque<Instant>> sendWindows = new ConcurrentHashMap<>();
 
     public PortfolioService(ProfileRepository profiles, SessionRepository sessions, SwipeRepository swipes,
-                            @Value("${pitchr.session-days}") int sessionDays) {
+                            ProfileImageRepository images, ProfileImageBlobRepository imageBlobs,
+                            MessageRepository messages, @Value("${pitchr.session-days}") int sessionDays) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.swipes = swipes;
+        this.images = images;
+        this.imageBlobs = imageBlobs;
+        this.messages = messages;
         this.sessionDays = sessionDays;
     }
 
-    /** Return profile DTOs with ordered metadata only; image blobs are never joined or selected here. */
     public List<ProfileResponse> profiles() {
-        return profiles.findAllByOrderByDisplayOrderAsc().stream()
-            .map(profile -> response(profile, null)).toList();
+        return profiles.findAllByOrderByDisplayOrderAsc().stream().map(profile -> response(profile, null)).toList();
     }
 
-    /** Return a single profile through the same mapping path used by list and matches responses. */
     public ProfileResponse profile(String id) { return response(requireProfile(id), null); }
 
-    /** Create a profile with a server-owned unique slug and an append-only display position. */
     @Transactional
     public ProfileResponse createProfile(ProfileRequest request) {
         Profile profile = new Profile();
@@ -57,7 +65,6 @@ public class PortfolioService {
         return response(profiles.saveAndFlush(profile), null);
     }
 
-    /** Replace all editable profile fields while keeping the immutable slug and display position. */
     @Transactional
     public ProfileResponse updateProfile(String id, ProfileRequest request) {
         Profile profile = requireProfile(id);
@@ -65,18 +72,13 @@ public class PortfolioService {
         return response(profiles.saveAndFlush(profile), null);
     }
 
-    /** Delete references that lack database cascades before deleting the profile in one transaction. */
     @Transactional
     public void deleteProfile(String id) {
         Profile profile = requireProfile(id);
         swipes.deleteAllByProfileId(id);
-        // Hibernate removes profile_skills, profile_highlights, and projects through the mapped element collections.
-        // This also respects the configured schema under both H2 and the Supabase `pitchr` schema.
-        // V3 has ON DELETE CASCADE from profiles -> profile_images -> profile_image_blobs.
         profiles.delete(profile);
     }
 
-    /** Add one or more server-validated uploads and persist each binary separately from its metadata. */
     @Transactional
     public List<ProfileResponse.Image> addImageFiles(String profileId, List<MultipartFile> files) {
         requireProfile(profileId);
@@ -103,7 +105,6 @@ public class PortfolioService {
         return List.copyOf(added);
     }
 
-    /** Add a validated http(s) URL as gallery metadata without downloading or proxying remote content. */
     @Transactional
     public List<ProfileResponse.Image> addImageUrl(String profileId, String url) {
         requireProfile(profileId);
@@ -115,7 +116,6 @@ public class PortfolioService {
         return List.of(new ProfileResponse.Image(image.id, url));
     }
 
-    /** Remove one image only when it belongs to the requested profile, then compact order and cover. */
     @Transactional
     public void deleteImage(String profileId, Long imageId) {
         requireProfile(profileId);
@@ -126,19 +126,14 @@ public class PortfolioService {
         refreshCover(profileId);
     }
 
-    /** Reorder all gallery items atomically; partial, duplicate, foreign, or stale id lists are rejected. */
     @Transactional
     public void reorderImages(String profileId, List<Long> imageIds) {
         requireProfile(profileId);
         List<ProfileImage> current = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
         if (imageIds == null || imageIds.size() != current.size()
-            || new HashSet<>(imageIds).size() != current.size()) {
-            throw badRequest("imageIds must contain every current image id exactly once");
-        }
-        Set<Long> currentIds = current.stream().map(row -> row.id).collect(java.util.stream.Collectors.toSet());
-        if (!currentIds.equals(new HashSet<>(imageIds))) {
-            throw badRequest("imageIds must contain only images belonging to this profile");
-        }
+            || new HashSet<>(imageIds).size() != current.size()) throw badRequest("imageIds must contain every current image id exactly once");
+        Set<Long> currentIds = current.stream().map(row -> row.id).collect(Collectors.toSet());
+        if (!currentIds.equals(new HashSet<>(imageIds))) throw badRequest("imageIds must contain only images belonging to this profile");
         for (int index = 0; index < imageIds.size(); index++) {
             final int order = index;
             Long imageId = imageIds.get(index);
@@ -148,16 +143,14 @@ public class PortfolioService {
         refreshCover(profileId);
     }
 
-    /** Fetch one uploaded blob for streaming; source-URL images intentionally have no blob row. */
     public ImagePayload image(Long id) {
-        ProfileImage metadata = images.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Image not found"));
-        ProfileImageBlob blob = imageBlobs.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Uploaded image data not found"));
+        ProfileImage metadata = images.findById(id).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Image not found"));
+        ProfileImageBlob blob = imageBlobs.findById(id).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Uploaded image data not found"));
         return new ImagePayload(metadata.contentType, blob.data);
     }
 
-    /** Existing anonymous session behavior is unchanged. */
     @Transactional
     public VisitorSession resumeSession(String token) {
         if (token != null) {
@@ -168,7 +161,6 @@ public class PortfolioService {
             Instant.now().truncatedTo(ChronoUnit.SECONDS).plus(sessionDays, ChronoUnit.DAYS)));
     }
 
-    /** Load match snapshots with their current ordered image metadata, still excluding blob bytes. */
     public List<ProfileResponse> matches(String token) {
         VisitorSession session = requireSession(token, false);
         return swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
@@ -176,9 +168,15 @@ public class PortfolioService {
             .map(s -> response(s.profile, s.action == Swipe.Action.super_like)).toList();
     }
 
-    /** Persist a swipe before the client presents the match or removes the card. */
     @Transactional
-    public SwipeResult swipe(String token, String profileId, Swipe.Action action) {
+    public SwipeResult swipe(String token, String profileId, String rawAction) {
+        final Swipe.Action action;
+        try {
+            action = rawAction == null ? null : Swipe.Action.valueOf(rawAction);
+        } catch (IllegalArgumentException ex) {
+            throw badRequest("action must be pass, like, or super_like");
+        }
+        if (action == null) throw badRequest("action must be pass, like, or super_like");
         VisitorSession session = requireSession(token, true);
         Profile profile = requireProfile(profileId);
         Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseGet(() -> {
@@ -192,6 +190,189 @@ public class PortfolioService {
         swipe.updatedAt = Instant.now();
         swipes.save(swipe);
         return new SwipeResult(profileId, action, action != Swipe.Action.pass, action == Swipe.Action.super_like);
+    }
+
+    public List<ConversationResponse> conversations(String token) {
+        VisitorSession session = requireSession(token, false);
+        return swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
+            .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
+            .map(swipe -> {
+                List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(session.id, swipe.profile.id);
+                Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
+                long unread = thread.stream().filter(m -> m.sender == Message.Sender.member && m.readAt == null).count();
+                return new ConversationResponse(response(swipe.profile, swipe.action == Swipe.Action.super_like),
+                    last == null ? null : MessageResponse.from(last), unread);
+            }).toList();
+    }
+
+    public List<MessageResponse> conversationMessages(String token, String profileId, long afterId) {
+        VisitorSession session = requireSession(token, false);
+        requireMatched(session, profileId);
+        List<Message> thread = afterId <= 0
+            ? messages.findBySessionIdAndProfileIdOrderByIdAsc(session.id, profileId)
+            : messages.findBySessionIdAndProfileIdAndIdGreaterThanOrderByIdAsc(session.id, profileId, afterId);
+        return thread.stream().map(MessageResponse::from).toList();
+    }
+
+    @Transactional
+    public MessageResponse sendVisitorMessage(String token, String profileId, String body) {
+        VisitorSession session = requireSession(token, true);
+        requireMatched(session, profileId);
+        String clean = body == null ? "" : body.trim();
+        if (clean.isEmpty() || clean.length() > 1000) throw badRequest("body must be 1-1000 characters");
+        if (!checkRateLimit(session.id)) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Message limit reached");
+        Message message = new Message();
+        message.session = session;
+        message.profile = requireProfile(profileId);
+        message.sender = Message.Sender.visitor;
+        message.body = clean;
+        message.createdAt = Instant.now();
+        return MessageResponse.from(messages.save(message));
+    }
+
+    @Transactional
+    public void markConversationRead(String token, String profileId) {
+        VisitorSession session = requireSession(token, true);
+        requireMatched(session, profileId);
+        Instant now = Instant.now();
+        for (Message message : messages.findBySessionIdAndProfileIdAndSenderAndReadAtIsNull(session.id, profileId, Message.Sender.member)) {
+            message.readAt = now;
+        }
+    }
+
+    @Transactional
+    public MessageResponse sendTeamMessage(String sessionId, String profileId, String body) {
+        VisitorSession session = sessions.findById(sessionId).filter(s -> s.expiresAt.isAfter(Instant.now())).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Visitor session not found"));
+        requireMatched(session, profileId);
+        String clean = body == null ? "" : body.trim();
+        if (clean.isEmpty() || clean.length() > 1000) throw badRequest("body must be 1-1000 characters");
+        Message message = new Message();
+        message.session = session;
+        message.profile = requireProfile(profileId);
+        message.sender = Message.Sender.member;
+        message.body = clean;
+        message.createdAt = Instant.now();
+        return MessageResponse.from(messages.save(message));
+    }
+
+    public List<TeamConversationResponse> teamConversations(String profileId) {
+        return swipes.findAll().stream()
+            .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
+            .filter(s -> profileId == null || profileId.isBlank() || s.profile.id.equals(profileId))
+            .map(swipe -> {
+                List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(swipe.session.id, swipe.profile.id);
+                Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
+                return new TeamConversationResponse(swipe.session.id, response(swipe.profile, swipe.action == Swipe.Action.super_like),
+                    last == null ? null : MessageResponse.from(last));
+            }).toList();
+    }
+
+    public List<MessageResponse> teamConversationMessages(String sessionId, String profileId) {
+        requireProfile(profileId);
+        sessions.findById(sessionId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Visitor session not found"));
+        return messages.findBySessionIdAndProfileIdOrderByIdAsc(sessionId, profileId).stream().map(MessageResponse::from).toList();
+    }
+
+    private void requireMatched(VisitorSession session, String profileId) {
+        Profile profile = requireProfile(profileId);
+        Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.FORBIDDEN, "Profile is not matched"));
+        if (swipe.action == Swipe.Action.pass) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Profile is not matched");
+    }
+
+    private boolean checkRateLimit(String sessionId) {
+        Deque<Instant> window = sendWindows.computeIfAbsent(sessionId, key -> new ArrayDeque<>());
+        synchronized (window) {
+            Instant cutoff = Instant.now().minusSeconds(60);
+            while (!window.isEmpty() && window.peekFirst().isBefore(cutoff)) window.removeFirst();
+            if (window.size() >= 20) return false;
+            window.addLast(Instant.now());
+            return true;
+        }
+    }
+
+    private void refreshCover(String profileId) {
+        Profile profile = requireProfile(profileId);
+        List<ProfileImage> ordered = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
+        profile.image = ordered.isEmpty() ? null : ordered.get(0).sourceUrl != null ? ordered.get(0).sourceUrl
+            : "/api/images/" + ordered.get(0).id;
+        profiles.save(profile);
+    }
+
+    private void normalizeImageOrder(String profileId) {
+        List<ProfileImage> ordered = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
+        for (int index = 0; index < ordered.size(); index++) ordered.get(index).displayOrder = index;
+        images.saveAll(ordered);
+    }
+
+    private ProfileResponse response(Profile profile, Boolean isSuper) {
+        return ProfileResponse.from(profile, isSuper, images.findByProfileIdOrderByDisplayOrderAscIdAsc(profile.id));
+    }
+
+    private void applyEditableFields(Profile profile, ProfileRequest request) {
+        profile.name = request.name().trim();
+        profile.persona = request.persona();
+        profile.age = request.age();
+        profile.location = request.location();
+        profile.role = request.role();
+        profile.verified = Boolean.TRUE.equals(request.verified());
+        profile.matchPercentage = request.matchPercentage() == null || request.matchPercentage().isBlank()
+            ? "New" : request.matchPercentage();
+        profile.bio = request.bio();
+        profile.tags.clear();
+        if (request.tags() != null) profile.tags.addAll(request.tags());
+        profile.dealbreakers.clear();
+        if (request.dealbreakers() != null) profile.dealbreakers.addAll(request.dealbreakers());
+        ProfileRequest.DetailsRequest details = request.details();
+        profile.fullBio = details == null ? null : details.fullBio();
+        profile.github = details == null ? null : details.github();
+        profile.linkedin = details == null ? null : details.linkedin();
+        profile.email = details == null ? null : details.email();
+        profile.projects.clear();
+        if (details != null && details.projects() != null) {
+            for (ProfileRequest.ProjectRequest project : details.projects()) {
+                Profile.Project entity = new Profile.Project();
+                entity.title = project.title();
+                entity.description = project.desc();
+                profile.projects.add(entity);
+            }
+        }
+    }
+
+    private String uniqueSlug(String name) {
+        String normalized = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        String base = normalized.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        if (base.isBlank()) base = "profile";
+        String candidate = base;
+        int suffix = 2;
+        while (profiles.existsById(candidate)) candidate = base + "-" + suffix++;
+        return candidate;
+    }
+
+    private String detectImageType(byte[] bytes) {
+        if (bytes.length >= 3 && (bytes[0] & 0xff) == 0xff && (bytes[1] & 0xff) == 0xd8 && (bytes[2] & 0xff) == 0xff) return "image/jpeg";
+        if (bytes.length >= 8 && (bytes[0] & 0xff) == 0x89 && bytes[1] == 'P' && bytes[2] == 'N'
+            && bytes[3] == 'G' && bytes[4] == 13 && bytes[5] == 10 && bytes[6] == 26 && bytes[7] == 10) return "image/png";
+        if (bytes.length >= 6 && (new String(bytes, 0, 6, java.nio.charset.StandardCharsets.US_ASCII).equals("GIF87a")
+            || new String(bytes, 0, 6, java.nio.charset.StandardCharsets.US_ASCII).equals("GIF89a"))) return "image/gif";
+        if (bytes.length >= 12 && new String(bytes, 0, 4, java.nio.charset.StandardCharsets.US_ASCII).equals("RIFF")
+            && new String(bytes, 8, 4, java.nio.charset.StandardCharsets.US_ASCII).equals("WEBP")) return "image/webp";
+        throw badRequest("Only valid JPEG, PNG, WebP, and GIF images are allowed");
+    }
+
+    private void validateHttpUrl(String value, String field) {
+        try {
+            URI uri = URI.create(value);
+            if (!( "http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null) throw new IllegalArgumentException();
+        } catch (RuntimeException ex) {
+            throw badRequest(field + " must be a valid http(s) URL");
+        }
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
     private Profile requireProfile(String id) {
@@ -209,7 +390,8 @@ public class PortfolioService {
         return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Create or resume a visitor session first");
     }
 
-    /** Return image bytes plus the signature-derived content type required by the streaming controller. */
+    public record ConversationResponse(ProfileResponse profile, MessageResponse lastMessage, long unreadCount) {}
+    public record TeamConversationResponse(String sessionId, ProfileResponse profile, MessageResponse lastMessage) {}
     public record ImagePayload(String contentType, byte[] bytes) {}
     public record SwipeResult(String profileId, Swipe.Action action, boolean matched, boolean isSuper) {}
 }

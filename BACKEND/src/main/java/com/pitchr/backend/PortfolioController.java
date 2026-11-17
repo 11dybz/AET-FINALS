@@ -9,6 +9,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,12 +55,18 @@ public class PortfolioController {
     private final PortfolioService service;
     private final String teamEmail;
     private final boolean secureCookie;
+    private final String adminKey;
+    private final String teamInboxKey;
 
     public PortfolioController(PortfolioService service, @Value("${pitchr.team-email}") String teamEmail,
-                               @Value("${pitchr.cookie-secure}") boolean secureCookie) {
+                               @Value("${pitchr.cookie-secure}") boolean secureCookie,
+                               @Value("${pitchr.admin-key:}") String adminKey,
+                               @Value("${pitchr.team-inbox-key:}") String teamInboxKey) {
         this.service = service;
         this.teamEmail = teamEmail;
         this.secureCookie = secureCookie;
+        this.adminKey = adminKey;
+        this.teamInboxKey = teamInboxKey;
     }
 
     @GetMapping({"", "/"})
@@ -215,7 +226,7 @@ public class PortfolioController {
     /** Store left/right/up swipe decisions as pass/like/super_like using the original endpoint. */
     @PutMapping(value = "/me/swipes/{profileId}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public PortfolioService.SwipeResult swipe(@CookieValue(name = COOKIE, required = false) String token,
-            @PathVariable String profileId, @Valid @RequestBody SwipeRequest request) {
+            @PathVariable String profileId, @RequestBody SwipeRequest request) {
         return service.swipe(token, profileId, request.action());
     }
 
@@ -233,7 +244,20 @@ public class PortfolioController {
         }
     }
 
-    public record SwipeRequest(@NotNull Swipe.Action action) {}
+    private void requireTeamKey(String supplied) {
+        if (teamInboxKey == null || teamInboxKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team inbox is disabled");
+        }
+        byte[] expected = teamInboxKey.getBytes(StandardCharsets.UTF_8);
+        byte[] actual = supplied == null ? new byte[0] : supplied.getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(expected, actual)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "A valid X-Team-Key header is required");
+        }
+    }
+
+    public record SwipeRequest(String action) {}
     public record MessageRequest(@NotBlank @Size(min = 1, max = 1000) String body) {}
+    public record ImageUrlRequest(@NotBlank @Pattern(regexp = "^https?://.+", message = "must be an http(s) URL") @Size(max = 1000) String url) {}
+    public record ImageOrderRequest(@NotEmpty List<@NotNull Long> imageIds) {}
     public record SessionResponse(Instant expiresAt) {}
 }

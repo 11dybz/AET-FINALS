@@ -19,8 +19,17 @@ public class ApiExceptionHandler {
         return error(ex.getStatusCode(), ex.getReason(), request);
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
-    ResponseEntity<ApiError> invalid(Exception ex, HttpServletRequest request) {
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> malformedJson(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "malformed JSON request body", request);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> invalid(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        if (ex instanceof MethodArgumentNotValidException notValid) {
+            var fieldError = notValid.getBindingResult().getFieldError("body");
+            if (fieldError != null) return error(HttpStatus.BAD_REQUEST, "body must be 1-1000 characters", request);
+        }
         return error(HttpStatus.BAD_REQUEST, "action must be pass, like, or super_like", request);
     }
 
@@ -29,5 +38,5 @@ public class ApiExceptionHandler {
             message == null || message.isBlank() ? "Request failed" : message, request.getRequestURI()));
     }
 
-    record ApiError(Instant timestamp, int status, String message, String path) {}
+    public record ApiError(Instant timestamp, int status, String message, String path) {}
 }

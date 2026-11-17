@@ -47,6 +47,33 @@ async function fetchBackendProfiles() {
   }
 }
 
+async function refreshProfilesAndMatches() {
+  const profiles = await apiCall('/profiles', 'GET', undefined, { admin: false });
+  if (Array.isArray(profiles)) {
+    PROFILES = profiles;
+    cardsState = [...profiles];
+  }
+  const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
+  matchedProfiles = Array.isArray(matches) ? matches : [];
+  backendAvailable = true;
+  updateDynamicCounts();
+  updateMatchesUI();
+  return { profiles: PROFILES, matches: matchedProfiles };
+}
+
+function updateDynamicCounts() {
+  const matchBadge = document.getElementById('matchBadge');
+  if (matchBadge) matchBadge.textContent = String(matchedProfiles.length);
+}
+
+function showBackendNotice(readOnly) {
+  const notice = document.getElementById('backendNotice');
+  if (!notice) return;
+  if (readOnly) notice.classList.remove('hidden');
+  else notice.classList.add('hidden');
+  notice.textContent = readOnly ? 'Read-only fallback mode: backend unavailable.' : '';
+}
+
 // 4 SPECIFIED TEAM MEMBERS DATA MODEL
 const FALLBACK_PROFILES = [
   {
@@ -566,13 +593,14 @@ function triggerSwipeAction(direction) {
   finalizeSwipe(direction);
 }
 
-function finalizeSwipe(direction) {
+async function finalizeSwipe(direction) {
   if (!activeCardElem || cardsState.length === 0 || isSwiping) return;
   isSwiping = true;
   hasSwipedOrMoved = true;
   isDragging = false;
   const card = activeCardElem;
   const swipedProfile = cardsState[0];
+  const action = direction === 'left' ? 'pass' : direction === 'up' ? 'super_like' : 'like';
   card.classList.add('card-transition');
   try {
     await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
@@ -1200,7 +1228,7 @@ function updateMatchesUI() {
   lucide.createIcons();
 }
 
-function resetDeck() {
+async function resetDeck() {
   if (isSwiping) return;
   try {
     await refreshProfilesAndMatches();
@@ -1284,7 +1312,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Check if opened via QR link (e.g., ?profile=fontelar-dave)
-  const urlParams = new URLSearchParams(window.location.search);
+  const urlParams = typeof URLSearchParams === 'undefined'
+    ? { get: () => null }
+    : new URLSearchParams((window.location && window.location.search) || '');
   const qrProfileId = urlParams.get('profile');
   if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
     openProfileScreenById(qrProfileId);

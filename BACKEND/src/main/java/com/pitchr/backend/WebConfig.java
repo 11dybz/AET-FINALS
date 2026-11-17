@@ -17,8 +17,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**").allowedOrigins(origins)
-            .allowedMethods("GET", "POST", "PUT", "OPTIONS")
-            .allowedHeaders("Content-Type").allowCredentials(true).maxAge(3600);
+            .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+            .allowedHeaders("Content-Type", "X-Admin-Key", "X-Team-Key").allowCredentials(true).maxAge(3600);
     }
 
     /** Disable caching for mutable API responses but permit immutable caching for uploaded images. */
