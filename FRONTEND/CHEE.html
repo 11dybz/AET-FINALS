@@ -12,7 +12,28 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="style.css">
+
+  <style>
+    .id-perspective { perspective: 1200px; }
+    .id-flipper {
+      position: relative;
+      width: 100%;
+      transition: transform 0.65s cubic-bezier(0.4, 0.2, 0.2, 1);
+      transform-style: preserve-3d;
+    }
+    .id-flipper.is-flipped { transform: rotateY(180deg); }
+    .id-face {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .id-back {
+      position: absolute;
+      inset: 0;
+      transform: rotateY(180deg);
+    }
+  </style>
 
   <script>
     tailwind.config = {
@@ -130,17 +151,110 @@
       </div>
     </section>
 
-    <!-- Shareable QR Code -->
-    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft flex flex-col items-center text-center space-y-3">
-      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Scan to Open Profile</h2>
-      <div id="profileQrCode" class="p-3 bg-white rounded-2xl border border-pink-100 shadow-sm"></div>
-      <p class="text-[11px] text-zinc-500">
-        Scan with your phone camera or the <span class="font-bold text-tinder-pink">Rizz</span><span class="font-black text-sky-500">U</span><span class="font-bold text-tinder-purple">me</span> QR Scanner
-      </p>
-      <button onclick="downloadProfileQr()" class="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
-        <i data-lucide="download" class="w-3.5 h-3.5"></i>
-        <span>Save QR Image</span>
-      </button>
+    <!-- RizzUme Digital Developer ID (eGovPH-Style Flip + Download) -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Official Digital ID</h2>
+          <p class="text-[11px] text-zinc-500">Tap card to flip Front &amp; Back</p>
+        </div>
+        <button onclick="flipIdCard()" class="px-3 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-100 text-tinder-pink text-xs font-bold flex items-center gap-1.5 transition-colors">
+          <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+          <span>Flip ID</span>
+        </button>
+      </div>
+
+      <div class="id-perspective cursor-pointer select-none" onclick="flipIdCard()">
+        <div id="idFlipper" class="id-flipper">
+
+          <!-- FRONT OF ID -->
+          <div id="idCardFront" class="id-face relative rounded-2xl overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white p-5 border border-pink-500/30 shadow-xl aspect-[1.586/1] flex flex-col justify-between">
+            <div class="pointer-events-none absolute -top-12 -right-12 w-40 h-40 rounded-full bg-tinder-pink/25 blur-2xl"></div>
+            <div class="pointer-events-none absolute -bottom-12 -left-12 w-40 h-40 rounded-full bg-sky-500/20 blur-2xl"></div>
+
+            <div class="flex items-center justify-between border-b border-white/10 pb-2.5 relative z-10">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-tinder-pink via-tinder-purple to-sky-500 flex items-center justify-center font-black text-[11px]">
+                  R<span class="text-cyan-200">U</span>
+                </div>
+                <div>
+                  <p class="text-xs font-black tracking-tight leading-none">
+                    <span class="text-tinder-pink">Rizz</span><span class="text-sky-400">U</span><span class="text-purple-400">me</span> DEV PASS
+                  </p>
+                  <p class="text-[9px] uppercase tracking-widest text-zinc-400 mt-0.5">Republic of Code • Manila, PH</p>
+                </div>
+              </div>
+              <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-white/10 text-cyan-300 border border-white/10">
+                ID #RZ-2026-001
+              </span>
+            </div>
+
+            <div class="flex items-center gap-4 my-auto py-2 relative z-10">
+              <img src="images/chee.jpg" alt="CHEE, Reynaldo Joseph" crossorigin="anonymous" class="w-20 h-24 rounded-xl object-cover border-2 border-tinder-pink shadow-md shrink-0" />
+              <div class="min-w-0 flex-1 space-y-1">
+                <span class="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-tinder-pink/20 text-pink-300 border border-pink-400/30">
+                  The Architectural Craftsman
+                </span>
+                <h3 class="text-base sm:text-lg font-black tracking-tight truncate">CHEE, Reynaldo Joseph</h3>
+                <p class="text-xs font-semibold text-sky-300 truncate">Full Stack Developer</p>
+                <div class="flex flex-wrap gap-1 pt-1">
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-zinc-200">Java</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-zinc-200">Spring Boot</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-zinc-200">React</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-zinc-200">PostgreSQL</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[9px] text-zinc-400 border-t border-white/10 pt-2 relative z-10">
+              <span class="flex items-center gap-1 text-emerald-400 font-bold">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> VERIFIED ENGINEER
+              </span>
+              <span class="font-mono">ISSUED: 2026 • VALID: LIFETIME</span>
+            </div>
+          </div>
+
+          <!-- BACK OF ID -->
+          <div id="idCardBack" class="id-face id-back rounded-2xl overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 text-white p-5 border border-sky-400/30 shadow-xl aspect-[1.586/1] flex flex-col justify-between">
+            <div class="w-full h-6 -mx-5 -mt-5 mb-2 bg-gradient-to-r from-tinder-pink via-tinder-purple to-sky-500 opacity-90"></div>
+
+            <div class="flex items-center gap-4 my-auto">
+              <div class="bg-white p-2 rounded-xl shadow-md shrink-0">
+                <div id="profileQrCode"></div>
+              </div>
+
+              <div class="min-w-0 flex-1 space-y-1.5 text-left">
+                <p class="text-[9px] font-black uppercase tracking-widest text-sky-400">Scan to Verify &amp; Connect</p>
+                <p class="text-[11px] text-zinc-300 leading-snug">
+                  This digital credential certifies <strong class="text-white">Reynaldo Joseph Chee</strong> as a verified RizzUme software engineer.
+                </p>
+                <div class="text-[10px] text-zinc-400 space-y-0.5 pt-1 font-mono">
+                  <p class="truncate">MAIL: chee.reynaldo@example.com</p>
+                  <p class="truncate">BASE: Manila, Philippines</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[9px] text-zinc-400 border-t border-white/10 pt-2">
+              <span>RizzUme Digital Identity System</span>
+              <span class="text-sky-400 font-bold">Tap to flip front ↺</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Download Buttons -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+        <button onclick="downloadFullIdSheet()" class="w-full py-3 rounded-xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white text-xs font-extrabold shadow-glow-pink hover:opacity-95 flex items-center justify-center gap-1.5 transition-all">
+          <i data-lucide="id-card" class="w-4 h-4"></i>
+          <span>Download Full ID (Front + Back)</span>
+        </button>
+        <button onclick="downloadActiveIdSide()" class="w-full py-3 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Download Current Side</span>
+        </button>
+      </div>
     </section>
 
     <!-- Rest of the team -->
@@ -184,22 +298,98 @@
     const profileUrl = window.location.href.split('#')[0];
     new QRCode(document.getElementById('profileQrCode'), {
       text: profileUrl,
-      width: 160,
-      height: 160,
-      colorDark: '#18181B',
+      width: 96,
+      height: 96,
+      colorDark: '#09090B',
       colorLight: '#FFFFFF',
       correctLevel: QRCode.CorrectLevel.H
     });
 
-    function downloadProfileQr() {
-      const canvas = document.querySelector('#profileQrCode canvas');
-      const img = document.querySelector('#profileQrCode img');
-      const dataUrl = canvas ? canvas.toDataURL('image/png') : img?.src;
-      if (!dataUrl) return;
+    function flipIdCard() {
+      document.getElementById('idFlipper').classList.toggle('is-flipped');
+    }
+
+    async function captureIdFace(elementId) {
+      await document.fonts.ready;
+
+      const original = document.getElementById(elementId);
+      const clone = original.cloneNode(true);
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = '540px';
+      clone.style.height = '340px';
+      clone.style.transform = 'none';
+      clone.classList.remove('id-back');
+
+      clone.querySelectorAll('.blur-2xl').forEach(el => el.remove());
+
+      clone.querySelectorAll('.truncate').forEach(el => {
+        el.classList.remove('truncate');
+        el.style.overflow = 'visible';
+        el.style.lineHeight = '1.35';
+      });
+
+      clone.querySelectorAll('span').forEach(span => {
+        if (span.className.includes('px-')) {
+          span.style.display = 'inline-flex';
+          span.style.alignItems = 'center';
+          span.style.justifyContent = 'center';
+          span.style.lineHeight = '1';
+          span.style.paddingTop = '4px';
+          span.style.paddingBottom = '6px';
+        }
+      });
+
+      const origCanvas = original.querySelector('canvas');
+      const cloneCanvas = clone.querySelector('canvas');
+      if (origCanvas && cloneCanvas) {
+        cloneCanvas.getContext('2d').drawImage(origCanvas, 0, 0);
+      }
+
+      document.body.appendChild(clone);
+      const rendered = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#09090B',
+        logging: false
+      });
+      document.body.removeChild(clone);
+      return rendered;
+    }
+
+    async function downloadActiveIdSide() {
+      const isFlipped = document.getElementById('idFlipper').classList.contains('is-flipped');
+      const canvas = await captureIdFace(isFlipped ? 'idCardBack' : 'idCardFront');
+      const baseName = document.title.split('•')[0].trim().replace(/[^a-z0-9]/gi, '_');
 
       const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `${document.title.split('•')[0].trim().replace(/[^a-z0-9]/gi, '_')}_QR.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.download = `${baseName}_RizzUme_ID_${isFlipped ? 'BACK' : 'FRONT'}.png`;
+      link.click();
+    }
+
+    async function downloadFullIdSheet() {
+      const frontCanvas = await captureIdFace('idCardFront');
+      const backCanvas = await captureIdFace('idCardBack');
+
+      const padding = 40;
+      const gap = 32;
+      const combined = document.createElement('canvas');
+      combined.width = frontCanvas.width + padding * 2;
+      combined.height = frontCanvas.height + backCanvas.height + padding * 2 + gap;
+
+      const ctx = combined.getContext('2d');
+      ctx.fillStyle = '#FDF2F8';
+      ctx.fillRect(0, 0, combined.width, combined.height);
+
+      ctx.drawImage(frontCanvas, padding, padding);
+      ctx.drawImage(backCanvas, padding, padding + frontCanvas.height + gap);
+
+      const baseName = document.title.split('•')[0].trim().replace(/[^a-z0-9]/gi, '_');
+      const link = document.createElement('a');
+      link.href = combined.toDataURL('image/png');
+      link.download = `${baseName}_RizzUme_Full_ID.png`;
       link.click();
     }
 
