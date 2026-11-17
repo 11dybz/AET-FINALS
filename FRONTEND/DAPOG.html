@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css">
 
   <script>
@@ -46,7 +47,7 @@
     <!-- Hero profile card -->
     <section class="rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden">
       <div class="relative w-full aspect-[4/4.4] bg-zinc-900">
-        <img src="images/greg.jpg" />
+        <img src="images/greg.jpg" alt="DAPOG, John Greg" class="w-full h-full object-cover" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
         <span class="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>Open for Projects
@@ -79,19 +80,36 @@
     <!-- Why match -->
     <section class="bg-rose-50/70 rounded-3xl p-5 border border-rose-100/70 space-y-1.5">
       <h2 class="text-xs font-black uppercase tracking-wider text-tinder-pink">Why You Should Match</h2>
-      <p class="text-xs text-zinc-700 font-medium">✅ Writes airtight BEGIN TRANSACTION & ROLLBACK logic</p><p class="text-xs text-zinc-700 font-medium">✅ Indexes columns before your query can even lag</p><p class="text-xs text-zinc-700 font-medium">✅ Restful endpoints documented to perfection</p>
+      <p class="text-xs text-zinc-700 font-medium">✅ Writes airtight BEGIN TRANSACTION & ROLLBACK logic</p>
+      <p class="text-xs text-zinc-700 font-medium">✅ Indexes columns before your query can even lag</p>
+      <p class="text-xs text-zinc-700 font-medium">✅ Restful endpoints documented to perfection</p>
     </section>
 
     <!-- Skills -->
     <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-3">
       <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Core Stack</h2>
-      <div class="flex flex-wrap gap-1.5"><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Java</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ MySQL</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ REST APIs</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Docker</span><span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Database Tuning</span></div>
+      <div class="flex flex-wrap gap-1.5">
+        <span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Java</span>
+        <span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ MySQL</span>
+        <span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ REST APIs</span>
+        <span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Docker</span>
+        <span class="px-2.5 py-1 rounded-full bg-pink-50 text-tinder-pink text-[11px] font-bold">⚡ Database Tuning</span>
+      </div>
     </section>
 
     <!-- Projects -->
     <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-3">
       <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Featured Projects</h2>
-      <div class="space-y-2.5"><div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl"><h4 class="text-sm font-bold text-zinc-900">Inventory Management System</h4><p class="text-xs text-zinc-500 mt-1 leading-relaxed">High-throughput warehouse tracking service featuring ACID-compliant transactions.</p></div><div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl"><h4 class="text-sm font-bold text-zinc-900">Auth Microservice Gateway</h4><p class="text-xs text-zinc-500 mt-1 leading-relaxed">Centralized JWT validation proxy handling stateless session routing.</p></div></div>
+      <div class="space-y-2.5">
+        <div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl">
+          <h4 class="text-sm font-bold text-zinc-900">Inventory Management System</h4>
+          <p class="text-xs text-zinc-500 mt-1 leading-relaxed">High-throughput warehouse tracking service featuring ACID-compliant transactions.</p>
+        </div>
+        <div class="p-4 bg-zinc-50 border border-zinc-100 rounded-2xl">
+          <h4 class="text-sm font-bold text-zinc-900">Auth Microservice Gateway</h4>
+          <p class="text-xs text-zinc-500 mt-1 leading-relaxed">Centralized JWT validation proxy handling stateless session routing.</p>
+        </div>
+      </div>
     </section>
 
     <!-- Contact -->
@@ -104,6 +122,17 @@
         <a href="https://github.com" target="_blank" rel="noopener" class="text-xs font-bold text-zinc-600 hover:text-zinc-900 flex items-center gap-1"><i data-lucide="github" class="w-4 h-4"></i> GitHub</a>
         <a href="https://linkedin.com" target="_blank" rel="noopener" class="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1"><i data-lucide="linkedin" class="w-4 h-4"></i> LinkedIn</a>
       </div>
+    </section>
+
+    <!-- Shareable QR Code -->
+    <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft flex flex-col items-center text-center space-y-3">
+      <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Scan to Open Profile</h2>
+      <div id="profileQrCode" class="p-3 bg-white rounded-2xl border border-pink-100 shadow-sm"></div>
+      <p class="text-[11px] text-zinc-500">Scan with your phone camera or the LF QR Scanner</p>
+      <button onclick="downloadProfileQr()" class="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        <span>Save QR Image</span>
+      </button>
     </section>
 
     <!-- Rest of the team -->
@@ -121,10 +150,11 @@
           <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-400"></i>
         </a>
         <a href="VILLANUEVA.html" class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-50 hover:bg-pink-50/60 border border-zinc-100 transition-colors">
-          <img src="images/justin.jpg" alt="Justin Villanueva initials" class="w-11 h-11 rounded-xl object-cover" />
+          <img src="images/justin.jpg" alt="Justin Villanueva" class="w-11 h-11 rounded-xl object-cover" />
           <div class="min-w-0 flex-1"><p class="text-xs font-extrabold text-zinc-900 truncate">VILLANUEVA, Justin</p><p class="text-[11px] text-zinc-500 truncate">Frontend & UI/UX Developer</p></div>
           <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-400"></i>
-        </a></div>
+        </a>
+      </div>
     </section>
   </main>
 
@@ -142,6 +172,29 @@
 
   <script>
     lucide.createIcons();
+
+    const profileUrl = window.location.href.split('#')[0];
+    new QRCode(document.getElementById('profileQrCode'), {
+      text: profileUrl,
+      width: 160,
+      height: 160,
+      colorDark: '#18181B',
+      colorLight: '#FFFFFF',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    function downloadProfileQr() {
+      const canvas = document.querySelector('#profileQrCode canvas');
+      const img = document.querySelector('#profileQrCode img');
+      const dataUrl = canvas ? canvas.toDataURL('image/png') : img?.src;
+      if (!dataUrl) return;
+
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `${document.title.split('•')[0].trim().replace(/[^a-z0-9]/gi, '_')}_QR.png`;
+      link.click();
+    }
+
     function likeProfile() {
       confetti({ particleCount: 90, spread: 80, origin: { y: 0.8 }, colors: ['#FE3C72', '#FD5564', '#FFD700', '#00D2FF', '#FFFFFF'] });
       const t = document.getElementById('toast');

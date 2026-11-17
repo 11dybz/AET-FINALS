@@ -169,6 +169,75 @@ let currentX = 0;
 let currentY = 0;
 let activeCardElem = null;
 let currentlyViewingProfile = null;
+let html5QrScanner = null;
+
+// ==================== QR CODE SCANNER & DEEP LINKING ====================
+function resolveProfileIdFromQr(rawText) {
+  const cleaned = (rawText || '').trim();
+  if (!cleaned) return null;
+
+  // Case 1: Full URL like https://site.com/?profile=fontelar-dave or /FONTELAR.html
+  try {
+    const url = new URL(cleaned, window.location.origin);
+    const paramId = url.searchParams.get('profile');
+    if (paramId && PROFILES.some(p => p.id === paramId)) return paramId;
+
+    const matchedByPage = PROFILES.find(p => url.pathname.toLowerCase().endsWith(p.page.toLowerCase()));
+    if (matchedByPage) return matchedByPage.id;
+  } catch (e) {
+    // Not a URL; fall through to raw ID check
+  }
+
+  // Case 2: Raw profile ID string (e.g., "fontelar-dave")
+  const matchedById = PROFILES.find(p => p.id.toLowerCase() === cleaned.toLowerCase());
+  return matchedById ? matchedById.id : null;
+}
+
+async function openQrScanner() {
+  const modal = document.getElementById('qrScannerModal');
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+  lucide.createIcons();
+
+  if (html5QrScanner) return;
+
+  html5QrScanner = new Html5Qrcode('qrReader');
+  try {
+    await html5QrScanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 230, height: 230 } },
+      async (decodedText) => {
+        const profileId = resolveProfileIdFromQr(decodedText);
+        if (profileId) {
+          playBeep('super');
+          await closeQrScanner();
+          openProfileScreenById(profileId);
+        } else {
+          showToast('Invalid QR Code', 'No matching team profile found.');
+        }
+      },
+      () => {}
+    );
+  } catch (err) {
+    console.error('Camera start failed:', err);
+    showToast('Camera Unavailable', 'Allow camera permissions or use HTTPS/localhost.');
+    closeQrScanner();
+  }
+}
+
+async function closeQrScanner() {
+  const modal = document.getElementById('qrScannerModal');
+  modal.classList.add('opacity-0', 'pointer-events-none');
+
+  if (html5QrScanner) {
+    try {
+      if (html5QrScanner.isScanning) {
+        await html5QrScanner.stop();
+      }
+      html5QrScanner.clear();
+    } catch (e) {}
+    html5QrScanner = null;
+  }
+}
 
 // ROUTING / MODE SELECTION
 function startMode(mode) {
@@ -727,6 +796,14 @@ function copyTeamContact() {
 window.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
   updateMatchesUI();
+
+  // Check if opened via QR link (e.g., ?profile=fontelar-dave)
+  const urlParams = new URLSearchParams(window.location.search);
+  const qrProfileId = urlParams.get('profile');
+  if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
+    openProfileScreenById(qrProfileId);
+    return;
+  }
 
   // 1. Initialize or resume session with backend safely inside an async function
   try {
