@@ -1,157 +1,117 @@
 # pitchr. backend
 
-Spring Boot 4.1.2, Java 17, Maven Wrapper, Spring MVC, Spring Data JPA, Bean Validation, and Flyway. Supports Supabase PostgreSQL through the `supabase` profile, with file-backed H2 for local development.
+Spring Boot 4.1.2, Java 17, Spring MVC, Spring Data JPA, Bean Validation, and Flyway. It serves the vanilla-JS/Tailwind frontend from the sibling `FRONTEND/` folder. Local development uses file-backed H2; the `supabase` profile uses Supabase PostgreSQL in the dedicated `pitchr` schema. Hibernate runs with `ddl-auto=validate`, so schema changes must be introduced as new Flyway migrations. Do not edit V1 or V2.
 
-## Run on Windows
-
-From the repository root:
+## Run locally (Windows)
 
 ```powershell
 cd BACKEND
 .\mvnw.cmd spring-boot:run
 ```
 
-Java 17 or newer must be installed. The wrapper downloads Maven and dependencies on the first run. Open `http://localhost:8080/` for the team portfolio; `http://localhost:8080/api` lists the API routes. The build bundles the sibling `FRONTEND` folder, including member pages, scripts, styles, and images. Rebuild/restart after frontend changes so the running app uses the updated files.
+Open `http://localhost:8080/`. The app creates `BACKEND/data/pitchr.mv.db` when launched from `BACKEND`; use the same working directory to reuse the database.
 
 ```powershell
-# Run integration tests against isolated H2 and PostgreSQL databases
 .\mvnw.cmd test
-# Build an executable application
 .\mvnw.cmd package
-java -jar target/pitchr-backend-0.0.1-SNAPSHOT.jar
 ```
 
-The application creates `BACKEND/data/pitchr.mv.db` when launched from BACKEND. Always use the same working directory to reuse the same database. Flyway creates the schema and seeds the four members, skills, highlights, and projects from the frontend once. Database files and build output are ignored by Git. Existing placeholder contact addresses, social links, and static match percentages are preserved as demo content.
+The Maven test suite runs the shared HTTP contract against H2 and a temporary embedded PostgreSQL instance, plus a separate admin-key test context. No production Supabase credentials are used in tests.
 
-## Connect to Supabase
+## API endpoints
 
-1. In your Supabase project, open **Connect → Session pooler** and copy the database host, port, database name, and username. Use the exact host and username shown; the shared pooler username is typically `postgres.PROJECT_REF`. The session pooler on port 5432 works on IPv4 networks and supports the backend's persistent connections and prepared statements. See the [Supabase Spring Boot guide](https://supabase.com/docs/guides/getting-started/quickstarts/spring-boot).
-2. Edit `BACKEND/.env`, which is ignored by Git. If it does not exist, copy `.env.example` to `.env`. Fill in:
+All paths below are prefixed with `/api`.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/profiles` | Return all profiles in display order, including ordered image metadata (no binary payloads) |
+| GET | `/profiles/{id}` | Return one full profile or 404 |
+| POST | `/profiles` | Create a profile; server generates a unique lowercase-hyphen slug and appends its display order; returns 201 |
+| PUT | `/profiles/{id}` | Replace all editable profile fields; slug is immutable; returns 200 |
+| DELETE | `/profiles/{id}` | Delete profile, related swipes, gallery rows/blobs, tags, highlights, and projects; returns 204 |
+| POST | `/profiles/{id}/images` | Add multipart `files` (one or more uploads) or JSON `{ "url": "https://..." }`; returns 201 |
+| DELETE | `/profiles/{id}/images/{imageId}` | Delete one image owned by that profile; returns 204 |
+| PUT | `/profiles/{id}/images/order` | Reorder the entire gallery using `{ "imageIds": [12, 13] }`; list must exactly match the current image IDs; returns 204 |
+| GET | `/images/{imageId}` | Stream an uploaded image with its verified content type and immutable cache headers |
+| POST | `/session` | Create/resume an anonymous visitor session and set an HttpOnly cookie |
+| PUT | `/me/swipes/{profileId}` | Save `{ "action": "pass" }`, `like`, or `super_like` |
+| GET | `/me/matches` | Return liked and super-liked profiles for the visitor cookie; `isSuper` appears only here |
+| GET | `/team` | Return the team name and contact email |
+
+Profile JSON preserves the established `tags`, `dealbreakers`, and `details` object shape. Project descriptions are exposed as `details.projects[].desc`. A profile also has `images: [{ "id": 12, "url": "/api/images/12" }]`; URL-backed gallery entries return their external URL. The legacy `image` property remains the cover-image field and always matches the first ordered gallery URL, or `null` if there are no images.
+
+### Profile and image validation
+
+Profile request validation enforces: name 1–100 characters and required; persona, role, and location up to 255; age 16–120; bio up to 2,000; full bio up to 4,000; up to 15 tags of 50 characters; up to 10 highlights of 300 characters; up to 10 projects with title up to 255 and description up to 2,000; match percentage up to 255 (defaults to `New`). GitHub, LinkedIn, and image URLs must use HTTP(S); email must be a valid email address.
+
+Each profile supports at most 8 images. Each upload is limited to 5 MB and accepted only when its magic bytes identify JPEG, PNG, WebP, or GIF. SVG is not accepted. The server does not trust the browser's Content-Type header. Uploaded bytes are stored in `profile_image_blobs`; `profile_images` contains only metadata, so profile list responses do not load blobs. The two-table layout uses a binary/VARBINARY mapping compatible with PostgreSQL `BYTEA` and H2 binary-varying storage. Multipart limits are 5 MB per part and 42 MB per request.
+
+The V3 migration backfills an image-gallery row for each seeded profile and changes the seed cover paths to the local files already served by the frontend: `/images/chee.jpg`, `/images/greg.jpg`, `/images/dave.jpg`, and `/images/justin.jpg`.
+
+### Write protection
+
+Profile and gallery `POST`, `PUT`, and `DELETE` requests are protected when `ADMIN_KEY` is nonblank. Send it in the `X-Admin-Key` header. The comparison uses `MessageDigest.isEqual`; a missing or incorrect key returns 403. Public `GET` routes are unchanged. When `ADMIN_KEY` is blank (the default for local/demo use), write routes remain open and the application logs a startup warning. The frontend prompts for the key after a 403 and keeps it in page memory only; it is not written to browser storage.
+
+For the default local H2 profile, export `ADMIN_KEY` in the process environment (or set `pitchr.admin-key` in `application.properties`); the default profile does not import `.env`. The Supabase profile imports `BACKEND/.env`, which is parsed as Java properties: do not add `export` or surrounding quotes.
+
+## Supabase PostgreSQL
+
+1. In Supabase, open **Connect → Session pooler** and copy the host, database name, username, and password.
+2. Copy `.env.example` to `.env`, then fill in the real values:
 
 ```properties
 SUPABASE_DB_URL=jdbc:postgresql://YOUR_SESSION_POOLER_HOST:5432/postgres?sslmode=require
 SUPABASE_DB_USERNAME=postgres.YOUR_PROJECT_REF
 SUPABASE_DB_PASSWORD=your-database-password
+ADMIN_KEY=replace-with-a-long-random-secret
 ```
 
-Use the **database password**, not an anon, publishable, or service-role API key. Keep the password in its separate property, outside the URL. This `.env` is loaded as a Java properties file: do not surround values with quotes, prepend `export`, or URL-encode the separate password. Double any literal backslashes in the password, or use OS environment variables instead. OS environment variables override the file. The file is loaded from the current working directory only when the supabase profile is enabled.
-
-3. From `BACKEND`, start with the Supabase profile on port 8081:
+3. Start the application with the Supabase profile:
 
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=supabase" "-Dspring-boot.run.arguments=--server.port=8081"
 ```
 
-For the packaged application:
+Flyway creates/updates the dedicated `pitchr` schema. Keep it out of the Supabase Data API's exposed schemas; the frontend must use Spring Boot's `/api` routes. Supabase Auth is not used by this app. Do not commit `.env` or database credentials.
 
-```powershell
-java -jar target/pitchr-backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=supabase --server.port=8081
+## Frontend behavior
+
+The page uses this ordered startup sequence: `POST /api/session`, `GET /api/profiles`, then `GET /api/me/matches`. Swipe decisions map left/right/up to `pass`/`like`/`super_like`; the card moves only after the PUT succeeds. A 404 removes a profile deleted by another editor; other failures restore the card so the visitor can retry.
+
+When the API is unavailable, the original four profiles are used as a read-only fallback and an availability notice is shown. CRUD is disabled in that mode. In the connected mode, the swipe header, directory header, and empty-deck state expose **Add card**. Edit/Delete actions are available from the profile overlay and directory cards. The editor supports repeatable tags, highlights, projects, image uploads, URL-backed images, image deletion, and image reordering. Uploaded images are downscaled in the browser to a maximum 1,600-pixel dimension and JPEG quality around 0.85 when browser Canvas APIs are available.
+
+The profile overlay displays every card, including newly created profiles. Gallery images use horizontal scroll snapping, dots/counter, arrow buttons, and a fullscreen lightbox with keyboard/touch navigation. The four manually maintained member pages remain as they were; their links are shown from the overlay rather than causing automatic redirects.
+
+The frontend uses `credentials: 'include'` for API calls. A separately hosted frontend can set `window.PITCHR_API_BASE = 'http://localhost:8081/api'` before loading `script.js`. The default CORS allowlist is `http://localhost:5500` and `http://127.0.0.1:5500`; set `ALLOWED_ORIGINS` to your deployed frontend origin(s).
+
+Run frontend regression tests from the repository root:
+
+```sh
+node --test FRONTEND/tests/app.test.cjs
 ```
-
-The Supabase profile requires the three connection properties and never falls back to H2. It enables encrypted PostgreSQL connections (`sslmode=require`) and uses a five-connection application pool. For certificate verification, use `sslmode=verify-full` and the database CA certificate as described in [Supabase's connection documentation](https://supabase.com/docs/guides/database/connecting-to-postgres).
-
-On the first successful connection, Flyway creates the **pitchr** schema and its tables and seeds the four members. Hibernate validates the schema; it does not automatically rewrite tables. Use a database role that can create and own this schema. Existing objects in `public`, `auth`, and `storage` are not used by this application. Keep `pitchr` out of the Supabase Data API's exposed schemas; the frontend should use Spring Boot's `/api` endpoints, which enforce visitor ownership. Supabase Auth is not part of this database connection; anonymous visitor cookies continue to work as before.
-
-Check the connection after startup:
-
-```powershell
-Invoke-RestMethod 'http://localhost:8081/api/profiles'
-```
-
-The Supabase project stores new profiles, sessions, and swipes independently of the local H2 database. Existing H2 visitor sessions/swipes are not transferred automatically. If Supabase is unreachable, check the exact pooler host/username, database password, network restrictions, and whether the project is paused.
-
-## Endpoints
-
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/api/profiles` | All four full profiles in display order; JSON array |
-| GET | `/api/profiles/{id}` | One full profile, or 404 |
-| POST | `/api/session` | Create/resume anonymous visitor; sets HttpOnly cookie; returns `expiresAt` |
-| PUT | `/api/me/swipes/{profileId}` | Save/update `{ "action": "pass" }`, `like`, or `super_like` |
-| GET | `/api/me/matches` | Full liked/super-liked profiles with `isSuper` |
-| GET | `/api/team` | Team `name` and `email` |
-
-Profile JSON retains the frontend's `tags`, `dealbreakers`, and `details` structure, including project `title` and `desc`. Profiles do not contain an `isSuper` property until returned as matches.
-
-Swipe response:
-
-```json
-{"profileId":"chee-reynaldo","action":"super_like","matched":true,"isSuper":true}
-```
-
-Matches are saved developers, without mutual approval. A session has one decision per profile: retrying a PUT is safe, `super_like` upgrades a like, and `pass` removes an existing match. Reloading the frontend deck should simply reuse the roster; it does not delete matches. The full roster is always returned, even for profiles previously passed or liked.
-
-Sessions expire after 30 days, with a fixed expiry. Expired/unknown cookies are replaced by POST `/api/session`. Protected endpoints return 401 for missing/invalid/expired sessions. Visitors are isolated by their opaque cookie; clearing cookies starts a fresh visitor. Expired rows are retained locally; add scheduled cleanup before long-running public deployment.
-
-Bad/missing actions return 400; unknown profiles return 404. Errors include `timestamp`, `status`, `message`, and `path`. API responses use `Cache-Control: no-store`.
-
-## Try it in PowerShell
-
-```powershell
-$base = 'http://localhost:8080/api'
-Invoke-RestMethod "$base/profiles"
-Invoke-RestMethod "$base/session" -Method Post -SessionVariable visitor
-Invoke-RestMethod "$base/me/swipes/chee-reynaldo" -Method Put `
-    -WebSession $visitor -ContentType 'application/json' `
-    -Body '{"action":"super_like"}'
-Invoke-RestMethod "$base/me/matches" -WebSession $visitor
-```
-
-## Frontend connection
-
-Spring Boot serves the homepage at `/`, all four member portfolio pages, and the frontend assets. The frontend uses `/api` on the same origin, so it follows the backend's current port automatically. Session initialization uses the shared request helper and shows a message if the backend is unavailable.
-
-The profile cards and matches still use the frontend's in-memory data. To complete their database integration:
-
-1. Load `/api/profiles` into `PROFILES` and `cardsState` during initialization.
-2. POST `/api/session`, then load `/api/me/matches` and call `updateMatchesUI()`.
-3. Map left/right/up to pass/like/super_like in `finalizeSwipe()`. Await a successful PUT before showing a match or removing the card. Disable swipe input during the request/animation and allow retries on failure.
-4. Read the team email from `/api/team` for `copyTeamContact()`.
-5. Add loading/error states and escape API text used in HTML templates; validate external link protocols.
-
-Use `credentials: 'include'` on API calls so the browser sends the session cookie:
-
-```javascript
-const API = '/api';
-await fetch(`${API}/session`, { method: 'POST', credentials: 'include' });
-const response = await fetch(`${API}/me/swipes/chee-reynaldo`, {
-  method: 'PUT',
-  credentials: 'include',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ action: 'like' })
-});
-if (!response.ok) throw new Error('Could not save swipe');
-```
-
-Open the app through Spring Boot, for example `http://localhost:8081/` when using the Supabase command above. For a separate frontend development server, set `window.PITCHR_API_BASE = 'http://localhost:8081/api'` in a script before loading `script.js`. Use `localhost` for both servers, or `127.0.0.1` for both, so SameSite cookies work. The default allowed separate frontend origins are `http://localhost:5500` and `http://127.0.0.1:5500`. Opening `index.html` as a file is not supported by the API's origin policy.
-
-Run the frontend startup and swipe regression checks from the repository root with `node --test FRONTEND/tests/app.test.cjs`.
 
 ## Configuration
 
-Set environment variables before starting the application:
-
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `8080` | API port |
-| `DB_URL` | `jdbc:h2:file:./data/pitchr;WRITE_DELAY=0` | Database location; flush committed writes immediately |
-| `DB_USERNAME` | `sa` | Database username |
-| `DB_PASSWORD` | empty | Local database password |
-| `TEAM_EMAIL` | `team.leads@example.com` | Team contact |
-| `ALLOWED_ORIGINS` | localhost/127.0.0.1 on port 5500 | Comma-separated frontend origins |
+| `PORT` | `8080` | HTTP server port |
+| `DB_URL` | `jdbc:h2:file:./data/pitchr;WRITE_DELAY=0` | Local H2 URL |
+| `DB_USERNAME` | `sa` | Local H2 username |
+| `DB_PASSWORD` | empty | Local H2 password |
+| `TEAM_EMAIL` | `team.leads@example.com` | Team contact email |
+| `ALLOWED_ORIGINS` | localhost ports 5500 | Comma-separated allowed frontend origins |
 | `COOKIE_SECURE` | `false` | Set `true` behind HTTPS |
-
-For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Profile editing/admin authentication and server-side mail delivery are outside the current frontend flow.
+| `ADMIN_KEY` | blank | Optional key protecting profile/gallery writes |
+| `SUPABASE_DB_URL` | unset | Supabase JDBC URL when the `supabase` profile is active |
+| `SUPABASE_DB_USERNAME` | unset | Supabase database username |
+| `SUPABASE_DB_PASSWORD` | unset | Supabase database password |
 
 ## Source layout
 
-- `Profile`, `VisitorSession`, `Swipe`: database entities.
-- `*Repository`: database access.
-- `PortfolioService`: transactions, session ownership, and swipe rules.
-- `PortfolioController`: HTTP endpoints and session cookie.
-- `ProfileResponse`: frontend-compatible response structure.
-- `WebConfig`, `ApiExceptionHandler`: allowed frontend origins and API errors.
-- `src/main/resources/db/migration`: versioned schema and seed data. Add a new migration to change an initialized database; do not edit an already-applied migration.
-- `PortfolioApiTests`: HTTP integration tests covering profile shape, visitor isolation, retry/concurrency handling, upgrades, passes, invalid input, expiry, and allowed origins.
-- `PostgresApiTests`: runs the same HTTP suite against a real temporary PostgreSQL server and checks schema isolation. Uses [embedded-postgres](https://github.com/zonkyio/embedded-postgres) test binaries; no Docker or Supabase credentials are required. Tests do not read `.env` or access your remote database.
-- `application-supabase.properties`, `.env.example`: Supabase connection profile and local configuration template.
+- `Profile`, `Swipe`, `VisitorSession`, `ProfileImage`, and `ProfileImageBlob`: JPA entities.
+- `*Repository`: database access, including a separate blob repository so profile reads do not fetch image bytes.
+- `PortfolioService`: CRUD transactions, slug generation, visitor sessions/swipes, image validation, cover synchronization, and delete ordering.
+- `PortfolioController`: HTTP routes, session cookie, image streaming, and optional admin-key checks.
+- `ProfileRequest` / `ProfileResponse`: Bean Validation input and frontend-compatible output records.
+- `WebConfig`, `ApiExceptionHandler`: CORS, cache behavior, and structured JSON errors.
+- `src/main/resources/db/migration`: immutable, versioned schema changes. V3 adds the image gallery and updates seeded cover paths.

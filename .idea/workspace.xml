@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="7ed0d7b4-76a3-44b5-84ea-022a60dfcc93" name="Changes" comment="JS ERROR">
+      <change beforePath="$PROJECT_DIR$/BACKEND/.env.example" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/BACKEND/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/BACKEND/.gitignore" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;nOiRf-afk&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/11dybz/AET-FINALS.git&quot;,
+    &quot;accountId&quot;: &quot;47fdbcad-364c-4946-88c0-b1fae93042a0&quot;
+  }
+}</component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0109791505392096" />
+      <entry key="MS500" value="1.5344523743801033" />
+      <entry key="S2" value="3.6753182204320587" />
+      <entry key="S5" value="5.922539995420928" />
+      <entry key="S10" value="8.01598509251761" />
+      <entry key="S30" value="11.16993678572207" />
+      <entry key="S60" value="12.435083114139688" />
+      <entry key="M2" value="13.175398797955731" />
+      <entry key="M5" value="13.659377986082083" />
+      <entry key="M10" value="13.827833292757932" />
+      <entry key="M15" value="13.884805344879304" />
+      <entry key="M30" value="13.94219311751493" />
+      <entry key="H1" value="13.97104395708908" />
+      <entry key="H2" value="13.985508801413266" />
+      <entry key="H4" value="13.99275110307846" />
+      <entry key="D1" value="13.998791392224934" />
+      <entry key="W1" value="13.999827330519329" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.9421392080506072" />
+      <entry key="MS500" value="1.5039650602641725" />
+      <entry key="S2" value="3.6550221510812806" />
+      <entry key="S5" value="5.910060084299788" />
+      <entry key="S10" value="8.007875362149543" />
+      <entry key="S30" value="11.16627452841722" />
+      <entry key="S60" value="12.433054691226632" />
+      <entry key="M2" value="13.174326283252412" />
+      <entry key="M5" value="13.65893364845802" />
+      <entry key="M10" value="13.827608448142527" />
+      <entry key="M15" value="13.884654844580567" />
+      <entry key="M30" value="13.94211756307138" />
+      <entry key="H1" value="13.971006103349959" />
+      <entry key="H2" value="13.985489855358608" />
+      <entry key="H4" value="13.992741625247872" />
+      <entry key="D1" value="13.998789811918794" />
+      <entry key="W1" value="13.99982710474495" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 8,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3LN257V821NCbJZCPtQotCZdYA3" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "main",
+    "junie.onboarding.icon.badge.shown": "true",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/home/noirf/Downloads/demo/AET-FINALS",
+    "settings.editor.selected.configurable": "reference.settings.ide.settings.web.browsers",
+    "to.speed.mode.migration.done": "true"
+  }
+}]]></component>
+  <component name="RunManager">
+    <configuration default="true" type="JetRunConfigurationType">
+      <module name="AET-FINALS" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <module name="AET-FINALS" />
+      <option name="filePath" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="7ed0d7b4-76a3-44b5-84ea-022a60dfcc93" name="Changes" comment="" />
+      <created>1793280018300</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1793280018300</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="ensure database connection with the frontend?" />
+    <MESSAGE value="JS ERROR" />
+    <option name="LAST_COMMIT_MESSAGE" value="JS ERROR" />
+  </component>
+</project>

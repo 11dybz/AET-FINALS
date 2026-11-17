@@ -17,12 +17,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:portfolio-test;DB_CLOSE_DELAY=-1",
-    "pitchr.cookie-secure=false"
+    "pitchr.cookie-secure=false",
+    "pitchr.admin-key="
 })
 class PortfolioApiTests {
     @Value("${local.server.port}") int port;
     @Autowired SessionRepository sessions;
     @Autowired SwipeRepository swipes;
+    @Autowired ProfileRepository profiles;
+    @Autowired ProfileImageRepository images;
+    @Autowired ProfileImageBlobRepository imageBlobs;
     private final HttpClient client = HttpClient.newHttpClient();
     private final JsonMapper json = new JsonMapper();
 
@@ -30,7 +34,7 @@ class PortfolioApiTests {
     void homepageMemberPagesAndAssetsAreServed() throws Exception {
         for (String path : List.of("/", "/index.html", "/CHEE.html", "/DAPOG.html",
                 "/FONTELAR.html", "/VILLANUEVA.html", "/style.css", "/script.js",
-                "/images/chee.jpg", "/images/greg.jpg", "/images/dave.jpg", "/images/justin-placeholder.svg")) {
+                "/images/chee.jpg", "/images/greg.jpg", "/images/dave.jpg", "/images/justin.jpg")) {
             var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).build(),
                 HttpResponse.BodyHandlers.ofByteArray());
             assertThat(response.statusCode()).as(path).isEqualTo(200);
@@ -81,6 +85,9 @@ class PortfolioApiTests {
             assertThat(profile.get("dealbreakers").size()).isEqualTo(3);
             assertThat(profile.get("details").get("projects").size()).isEqualTo(2);
             assertThat(profile.get("details").get("projects").get(0).get("desc").asString()).isNotBlank();
+            // V3 returns ordered gallery metadata while leaving binary bytes out of profile responses.
+            assertThat(profile.get("images").isArray()).isTrue();
+            assertThat(profile.get("images").get(0).get("url").asString()).startsWith("/images/");
             var detail = request("GET", "/profiles/" + profile.get("id").asString(), null, null);
             assertThat(body(detail)).isEqualTo(profile);
         }
@@ -157,11 +164,14 @@ class PortfolioApiTests {
     @Test
     void invalidActionsAndUnknownProfilesDoNotWriteSwipes() throws Exception {
         String visitor = session();
-        for (String payload : List.of("{}", "{\"action\":null}", "{\"action\":\"right\"}", "{broken")) {
+        for (String payload : List.of("{}", "{\"action\":null}", "{\"action\":\"right\"}")) {
             var response = request("PUT", "/me/swipes/chee-reynaldo", visitor, payload);
             assertThat(response.statusCode()).isEqualTo(400);
             assertThat(body(response).get("message").asString()).contains("action");
         }
+        var malformed = request("PUT", "/me/swipes/chee-reynaldo", visitor, "{broken");
+        assertThat(malformed.statusCode()).isEqualTo(400);
+        assertThat(body(malformed).get("message").asString()).contains("malformed");
         assertThat(request("GET", "/profiles/missing", null, null).statusCode()).isEqualTo(404);
         assertThat(request("PUT", "/me/swipes/missing", visitor, "{\"action\":\"like\"}").statusCode()).isEqualTo(404);
         assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(token(visitor))).isEmpty();
@@ -187,6 +197,143 @@ class PortfolioApiTests {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(body(response).get("email").asString()).isEqualTo("team.leads@example.com");
     }
+
+    // Full CRUD verifies the server-generated slug, immutable id, and replacement semantics.
+    @Test
+    void profileCrudCreatesUpdatesAndDeletes() throws Exception {
+        String payload = """
+            {"name":"Ada Lovelace","persona":"Engineer","age":28,"location":"London","role":"Developer",
+             "verified":true,"matchPercentage":"New","bio":"Builds systems","tags":["Java"],
+             "dealbreakers":["Writes tests"],"details":{"fullBio":"Detailed profile","projects":[{"title":"Engine","desc":"Built it"}],
+             "github":"https://github.com/ada","linkedin":"https://linkedin.com/in/ada","email":"ada@example.com"}}
+            """;
+        var created = request("POST", "/profiles", null, payload);
+        assertThat(created.statusCode()).isEqualTo(201);
+        JsonNode profile = body(created);
+        String id = profile.get("id").asString();
+        assertThat(id).isEqualTo("ada-lovelace");
+        assertThat(profile.get("images").size()).isZero();
+        String updated = payload.replace("Ada Lovelace", "Ada Lovelace Updated").replace("28", "29");
+        var replaced = request("PUT", "/profiles/" + id, null, updated);
+        assertThat(replaced.statusCode()).isEqualTo(200);
+        assertThat(body(replaced).get("id").asString()).isEqualTo(id);
+        assertThat(body(replaced).get("age").asInt()).isEqualTo(29);
+        assertThat(request("DELETE", "/profiles/" + id, null, null).statusCode()).isEqualTo(204);
+        assertThat(request("GET", "/profiles/" + id, null, null).statusCode()).isEqualTo(404);
+    }
+
+    // Bean Validation returns the failing field rather than a misleading swipe-action message.
+    @Test
+    void profileValidationReturnsFieldSpecificErrors() throws Exception {
+        var response = request("POST", "/profiles", null,
+            "{\"name\":\"Too Young\",\"age\":15,\"details\":{}}" );
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(body(response).get("message").asString()).contains("age");
+    }
+
+    // Multipart upload, blob streaming, order changes, and deletion exercise the complete gallery contract.
+    @Test
+    void imageUploadServeReorderAndDeleteWork() throws Exception {
+        String created = request("POST", "/profiles", null,
+            "{\"name\":\"Gallery Owner\",\"age\":24,\"details\":{}}" ).body();
+        String id = json.readTree(created).get("id").asString();
+        byte[] jpeg = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x01, 0x02, 0x03};
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10, 0x01};
+        String boundary = "pitchr-test-boundary";
+        byte[] multipart = multipart(boundary, List.of(new UploadPart("one.jpg", jpeg), new UploadPart("two.png", png)));
+        var upload = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profiles/" + id + "/images"))
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(multipart)).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(upload.statusCode()).isEqualTo(201);
+        JsonNode items = json.readTree(upload.body());
+        long first = items.get(0).get("id").asLong();
+        long second = items.get(1).get("id").asLong();
+        var profile = body(request("GET", "/profiles/" + id, null, null));
+        assertThat(profile.get("images").get(0).get("id").asLong()).isEqualTo(first);
+        var served = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/images/" + first)).GET().build(),
+            HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(served.statusCode()).isEqualTo(200);
+        assertThat(served.headers().firstValue("Content-Type").orElse("")).contains("image/jpeg");
+        assertThat(served.headers().firstValue("X-Content-Type-Options").orElse("")).isEqualTo("nosniff");
+        assertThat(served.headers().firstValue("Cache-Control").orElse("")).contains("immutable");
+        assertThat(request("PUT", "/profiles/" + id + "/images/order", null,
+            "{\"imageIds\":[" + second + "," + first + "]}").statusCode()).isEqualTo(204);
+        assertThat(body(request("GET", "/profiles/" + id, null, null)).get("images").get(0).get("id").asLong()).isEqualTo(second);
+        assertThat(request("DELETE", "/profiles/" + id + "/images/" + second, null, null).statusCode()).isEqualTo(204);
+        assertThat(images.findByProfileIdOrderByDisplayOrderAscIdAsc(id)).hasSize(1);
+        assertThat(request("DELETE", "/profiles/" + id, null, null).statusCode()).isEqualTo(204);
+    }
+
+    // File signatures are authoritative: a .jpg filename with non-image bytes is rejected.
+    @Test
+    void invalidImageTypeIsRejected() throws Exception {
+        String created = request("POST", "/profiles", null,
+            "{\"name\":\"Bad Image Owner\",\"age\":24,\"details\":{}}" ).body();
+        String id = json.readTree(created).get("id").asString();
+        String boundary = "pitchr-invalid-boundary";
+        byte[] multipart = multipart(boundary, List.of(new UploadPart("bad.jpg", new byte[]{1, 2, 3, 4})));
+        var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profiles/" + id + "/images"))
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(multipart)).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(json.readTree(response.body()).get("message").asString()).contains("JPEG");
+        assertThat(request("DELETE", "/profiles/" + id, null, null).statusCode()).isEqualTo(204);
+    }
+
+    // The multipart resolver rejects a part larger than the configured 5 MB per-image limit.
+    @Test
+    void imageLargerThanFiveMegabytesIsRejected() throws Exception {
+        String created = request("POST", "/profiles", null,
+            "{\"name\":\"Large Image Owner\",\"age\":24,\"details\":{}}" ).body();
+        String id = json.readTree(created).get("id").asString();
+        byte[] oversized = new byte[5 * 1024 * 1024 + 1];
+        oversized[0] = (byte) 0xff; oversized[1] = (byte) 0xd8; oversized[2] = (byte) 0xff;
+        String boundary = "pitchr-large-boundary";
+        byte[] multipart = multipart(boundary, List.of(new UploadPart("large.jpg", oversized)));
+        var response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profiles/" + id + "/images"))
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(multipart)).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(413);
+        assertThat(json.readTree(response.body()).get("message").asString()).contains("5 MB");
+        assertThat(request("DELETE", "/profiles/" + id, null, null).statusCode()).isEqualTo(204);
+    }
+
+    // Deleting a profile removes its swipe rows and gallery metadata/blob rows in the same transaction.
+    @Test
+    void deletingProfileCascadesGalleryAndSwipes() throws Exception {
+        String visitor = session();
+        String created = request("POST", "/profiles", null,
+            "{\"name\":\"Cascade Test\",\"age\":25,\"details\":{}}" ).body();
+        String id = json.readTree(created).get("id").asString();
+        request("PUT", "/me/swipes/" + id, visitor, "{\"action\":\"like\"}");
+        byte[] jpeg = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x01};
+        String boundary = "pitchr-cascade-boundary";
+        byte[] multipart = multipart(boundary, List.of(new UploadPart("cascade.jpg", jpeg)));
+        client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profiles/" + id + "/images"))
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(multipart)).build(), HttpResponse.BodyHandlers.ofString());
+        Long imageId = images.findByProfileIdOrderByDisplayOrderAscIdAsc(id).get(0).id;
+        assertThat(request("DELETE", "/profiles/" + id, null, null).statusCode()).isEqualTo(204);
+        assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(token(visitor))).isEmpty();
+        assertThat(images.findById(imageId)).isEmpty();
+        assertThat(imageBlobs.findById(imageId)).isEmpty();
+        assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isZero();
+        assertThat(request("GET", "/images/" + imageId, null, null).statusCode()).isEqualTo(404);
+    }
+
+    // Multipart builder keeps the integration tests independent of third-party HTTP clients.
+    private byte[] multipart(String boundary, List<UploadPart> parts) throws Exception {
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        for (UploadPart part : parts) {
+            output.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"files\"; filename=\"" + part.name()
+                + "\"\r\nContent-Type: application/octet-stream\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.write(part.bytes());
+            output.write("\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        output.write(("--" + boundary + "--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return output.toByteArray();
+    }
+    private record UploadPart(String name, byte[] bytes) {}
 
     private String session() throws Exception {
         var response = request("POST", "/session", null, null);

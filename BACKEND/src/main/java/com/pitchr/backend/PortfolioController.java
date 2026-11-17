@@ -1,47 +1,171 @@
 package com.pitchr.backend;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 @RestController
+@Validated
 @RequestMapping("/api")
 public class PortfolioController {
     static final String COOKIE = "PITCHR_SESSION";
+    private static final Logger log = LoggerFactory.getLogger(PortfolioController.class);
     private final PortfolioService service;
     private final String teamEmail;
     private final boolean secureCookie;
+    private final String adminKey;
 
     public PortfolioController(PortfolioService service, @Value("${pitchr.team-email}") String teamEmail,
-                               @Value("${pitchr.cookie-secure}") boolean secureCookie) {
+                               @Value("${pitchr.cookie-secure}") boolean secureCookie,
+                               @Value("${pitchr.admin-key:}") String adminKey) {
         this.service = service;
         this.teamEmail = teamEmail;
         this.secureCookie = secureCookie;
+        this.adminKey = adminKey == null ? "" : adminKey;
+    }
+
+    /** Warn operators that the default local/demo configuration leaves profile writes open. */
+    @PostConstruct
+    void warnWhenAdminKeyIsUnset() {
+        if (adminKey.isBlank()) log.warn("PITCHR ADMIN KEY IS NOT CONFIGURED: profile write endpoints are open");
     }
 
     @GetMapping({"", "/"})
     public Map<String, Object> index() {
-        return Map.of("name", "pitchr.", "endpoints", Map.of(
-            "profiles", "GET /api/profiles",
-            "profile", "GET /api/profiles/{id}",
-            "session", "POST /api/session",
-            "matches", "GET /api/me/matches",
-            "swipe", "PUT /api/me/swipes/{profileId}",
-            "team", "GET /api/team"));
+    // Map.of() supports a maximum of 10 key-value pairs.
+    // Map.ofEntries() supports a larger number of entries.
+    return Map.of(
+        "name", "pitchr.",
+        "endpoints", Map.ofEntries(
+            Map.entry("profiles", "GET /api/profiles"),
+            Map.entry("createProfile", "POST /api/profiles"),
+            Map.entry("updateProfile", "PUT /api/profiles/{id}"),
+            Map.entry("deleteProfile", "DELETE /api/profiles/{id}"),
+            Map.entry("profileImages", "POST/DELETE /api/profiles/{id}/images"),
+            Map.entry("image", "GET /api/images/{imageId}"),
+            Map.entry("profile", "GET /api/profiles/{id}"),
+            Map.entry("session", "POST /api/session"),
+            Map.entry("matches", "GET /api/me/matches"),
+            Map.entry("swipe", "PUT /api/me/swipes/{profileId}"),
+            Map.entry("team", "GET /api/team")
+            )
+        );
     }
 
+    /** Public profile list includes image metadata but never uploaded bytes. */
     @GetMapping("/profiles")
     public List<ProfileResponse> profiles() { return service.profiles(); }
 
+    /** Public full-profile read, retaining the original profile JSON fields. */
     @GetMapping("/profiles/{id}")
     public ProfileResponse profile(@PathVariable String id) { return service.profile(id); }
 
+    /** Create a profile; ids are generated by the service and never accepted from the caller. */
+    @PostMapping(value = "/profiles", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ProfileResponse> createProfile(@RequestHeader(value = "X-Admin-Key", required = false) String key,
+                                                           @Valid @RequestBody ProfileRequest request) {
+        requireAdminKey(key);
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createProfile(request));
+    }
+
+    /** Full update of editable attributes; the profile slug and display position remain immutable. */
+    @PutMapping(value = "/profiles/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ProfileResponse updateProfile(@RequestHeader(value = "X-Admin-Key", required = false) String key,
+                                         @PathVariable String id, @Valid @RequestBody ProfileRequest request) {
+        requireAdminKey(key);
+        return service.updateProfile(id, request);
+    }
+
+    /** Delete associated swipes and collections, then the profile, within one service transaction. */
+    @DeleteMapping("/profiles/{id}")
+    public ResponseEntity<Void> deleteProfile(@RequestHeader(value = "X-Admin-Key", required = false) String key,
+                                              @PathVariable String id) {
+        requireAdminKey(key);
+        service.deleteProfile(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Receive multiple binary uploads under the multipart field name `files`. */
+    @PostMapping(value = "/profiles/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<List<ProfileResponse.Image>> uploadImages(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key,
+            @PathVariable String id, @RequestPart("files") List<MultipartFile> files) {
+        requireAdminKey(key);
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addImageFiles(id, files));
+    }
+
+    /** Register an external http(s) image URL as gallery metadata without downloading remote content. */
+    @PostMapping(value = "/profiles/{id}/images", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<ProfileResponse.Image>> addImageUrl(
+            @RequestHeader(value = "X-Admin-Key", required = false) String key,
+            @PathVariable String id, @Valid @RequestBody ImageUrlRequest request) {
+        requireAdminKey(key);
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addImageUrl(id, request.url()));
+    }
+
+    /** Delete one image belonging to this profile and return an empty 204 response. */
+    @DeleteMapping("/profiles/{id}/images/{imageId}")
+    public ResponseEntity<Void> deleteImage(@RequestHeader(value = "X-Admin-Key", required = false) String key,
+                                            @PathVariable String id, @PathVariable Long imageId) {
+        requireAdminKey(key);
+        service.deleteImage(id, imageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Reorder the complete gallery; imageIds must be the exact current id set. */
+    @PutMapping(value = "/profiles/{id}/images/order", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> reorderImages(@RequestHeader(value = "X-Admin-Key", required = false) String key,
+                                               @PathVariable String id, @Valid @RequestBody ImageOrderRequest request) {
+        requireAdminKey(key);
+        service.reorderImages(id, request.imageIds());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Stream only uploaded binary payloads with their sniffed MIME type and immutable caching. */
+    @GetMapping("/images/{imageId}")
+    public ResponseEntity<byte[]> image(@PathVariable Long imageId) {
+        PortfolioService.ImagePayload payload = service.image(imageId);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(payload.contentType()))
+            .header("X-Content-Type-Options", "nosniff")
+            .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable())
+            .body(payload.bytes());
+    }
+
+    /** Start or resume the existing opaque visitor session and issue its HttpOnly cookie. */
     @PostMapping("/session")
     public ResponseEntity<SessionResponse> session(@CookieValue(name = COOKIE, required = false) String token) {
         VisitorSession session = service.resumeSession(token);
@@ -52,20 +176,38 @@ public class PortfolioController {
             .body(new SessionResponse(session.expiresAt));
     }
 
+    /** Match list remains public only to the matching anonymous visitor cookie. */
     @GetMapping("/me/matches")
     public List<ProfileResponse> matches(@CookieValue(name = COOKIE, required = false) String token) {
         return service.matches(token);
     }
 
+    /** Store left/right/up swipe decisions as pass/like/super_like using the original endpoint. */
     @PutMapping(value = "/me/swipes/{profileId}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public PortfolioService.SwipeResult swipe(@CookieValue(name = COOKIE, required = false) String token,
             @PathVariable String profileId, @Valid @RequestBody SwipeRequest request) {
         return service.swipe(token, profileId, request.action());
     }
 
+    /** Existing team contact endpoint is unchanged. */
     @GetMapping("/team")
     public Map<String, String> team() { return Map.of("name", "pitchr.", "email", teamEmail); }
 
+    /** Constant-time comparison avoids leaking key-prefix information through response timing. */
+    private void requireAdminKey(String supplied) {
+        if (adminKey.isBlank()) return;
+        byte[] expected = adminKey.getBytes(StandardCharsets.UTF_8);
+        byte[] actual = supplied == null ? new byte[0] : supplied.getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(expected, actual)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A valid X-Admin-Key header is required");
+        }
+    }
+
     public record SwipeRequest(@NotNull Swipe.Action action) {}
     public record SessionResponse(Instant expiresAt) {}
+    /** Image URLs are restricted to absolute http(s) URLs to block javascript/data payloads. */
+    public record ImageUrlRequest(@NotNull @NotEmpty @Size(max = 1000)
+        @Pattern(regexp = "https?://.+", message = "must be an http(s) URL") String url) {}
+    /** The reorder API accepts a full, nonempty replacement sequence rather than partial moves. */
+    public record ImageOrderRequest(@NotNull @NotEmpty List<Long> imageIds) {}
 }

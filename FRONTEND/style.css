@@ -24,3 +24,83 @@
   background: #e2e8f0;
   border-radius: 9999px;
 }
+/* Gallery slides scroll-snap horizontally. Each slide takes the natural height of its photo (nothing is
+   cropped); script.js sets the track height to the visible slide so the card resizes between photos. A blurred
+   copy of the photo fills any letterbox gap when a very tall image hits the max-height cap. */
+.gallery-track { display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 1rem; background: #18181b; transition: height .3s ease; }
+.gallery-track::-webkit-scrollbar { display: none; }
+.gallery-slide { position: relative; flex: 0 0 100%; scroll-snap-align: start; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #18181b; }
+.gallery-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(22px) brightness(.5); transform: scale(1.15); pointer-events: none; }
+.gallery-image { position: relative; display: block; width: 100%; height: auto; max-height: min(75vh, 44rem); object-fit: contain; cursor: zoom-in; }
+.gallery-image.image-loading { min-height: 12rem; }
+.gallery-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 2.25rem; height: 2.25rem; border-radius: 9999px; background: rgba(24,24,27,.7); color: white; font-size: 1.8rem; line-height: 1; z-index: 2; transition: background .15s ease, opacity .15s ease; }
+.gallery-arrow:hover:not(:disabled) { background: rgba(254,60,114,.9); }
+.gallery-arrow:disabled { opacity: .3; cursor: default; }
+.gallery-prev { left: .6rem; } .gallery-next { right: .6rem; }
+.gallery-expand { position: absolute; top: .6rem; right: .6rem; z-index: 2; width: 2rem; height: 2rem; border-radius: .6rem; background: rgba(24,24,27,.7); color: white; font-size: 1rem; line-height: 1; transition: background .15s ease; }
+.gallery-expand:hover { background: rgba(254,60,114,.9); }
+.gallery-arrow:focus-visible, .gallery-expand:focus-visible, .gallery-dot:focus-visible { outline: 2px solid #fe3c72; outline-offset: 2px; }
+.gallery-dot { width: .45rem; height: .45rem; border-radius: 50%; background: #d4d4d8; transition: width .2s ease, background .2s ease; }
+.gallery-dot.active { background: #fe3c72; width: 1.1rem; border-radius: 1rem; }
+
+/* Opening a card fades and lifts the profile into view instead of snapping on. */
+@keyframes profile-enter { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+#fullProfileScreen.flex { animation: profile-enter .28s ease-out; }
+@keyframes lightbox-enter { from { opacity: 0; } to { opacity: 1; } }
+.profile-lightbox:not(.hidden) { animation: lightbox-enter .18s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  #fullProfileScreen.flex, .profile-lightbox:not(.hidden) { animation: none; }
+  .gallery-track { transition: none; }
+}
+
+/* The editor and confirmation overlays share a compact, responsive modal treatment. */
+.app-modal { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(9,9,11,.72); backdrop-filter: blur(5px); }
+.app-modal.hidden { display: none; }
+.app-modal-panel { width: 100%; max-width: 48rem; max-height: 92vh; overflow-y: auto; border-radius: 1.5rem; background: white; padding: 1.25rem; box-shadow: 0 25px 80px rgba(0,0,0,.25); }
+.editor-panel { max-width: 48rem; }
+.editor-close { width: 2rem; height: 2rem; border-radius: 9999px; background: #f4f4f5; font-size: 1.4rem; }
+.editor-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
+.editor-grid label, #profileEditorForm > label { display: flex; flex-direction: column; gap: .35rem; color: #52525b; font-size: .72rem; font-weight: 700; }
+.editor-grid input, #profileEditorForm textarea, .editor-text-input, .repeatable-row input, .repeatable-row textarea, .editor-url-input { width: 100%; border: 1px solid #e4e4e7; border-radius: .65rem; padding: .6rem .7rem; color: #18181b; font-size: .8rem; background: white; }
+.editor-section-heading { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: .5rem; color: #3f3f46; font-size: .75rem; font-weight: 800; }
+.editor-section-heading button { color: #e11d66; font-size: .7rem; font-weight: 800; }
+.repeatable-list { display: grid; gap: .5rem; }
+.repeatable-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .5rem; align-items: center; }
+.repeatable-row:has(textarea) { grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr) auto; }
+.editor-remove { padding: .4rem .55rem; color: #e11d48; background: #fff1f2; border-radius: .5rem; font-size: .68rem; font-weight: 800; }
+.editor-primary, .editor-secondary, .editor-danger { padding: .65rem .9rem; border-radius: .7rem; font-size: .75rem; font-weight: 800; }
+.editor-primary { color: white; background: #e83e78; } .editor-secondary { color: #3f3f46; background: #f4f4f5; }
+.editor-danger { color: white; background: #e11d48; }
+.editor-image-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(6.5rem,1fr)); gap: .6rem; }
+.editor-image-tile { position: relative; min-width: 0; height: 7rem; overflow: hidden; border-radius: .8rem; background: #f4f4f5; border: 1px solid #e4e4e7; cursor: grab; }
+.editor-image-tile img { width: 100%; height: 100%; object-fit: cover; }
+.cover-badge { position: absolute; top: .35rem; left: .35rem; border-radius: 999px; background: #e83e78; color: white; padding: .2rem .45rem; font-size: .58rem; font-weight: 900; }
+.editor-image-controls { position: absolute; inset: auto .25rem .25rem; display: flex; justify-content: center; gap: .25rem; }
+.editor-image-controls button { min-width: 1.7rem; height: 1.7rem; border-radius: .45rem; background: rgba(24,24,27,.8); color: white; font-size: .75rem; }
+.editor-image-controls button:disabled { opacity: .35; }
+.upload-picker { display: inline-flex; align-items: center; padding: .6rem .8rem; border-radius: .7rem; background: #fff1f2; color: #be185d; font-size: .72rem; font-weight: 800; cursor: pointer; }
+.upload-picker input { display: none; }
+.editor-url-input { flex: 1; min-width: 11rem; }
+.backend-notice { position: sticky; top: 0; z-index: 60; padding: .5rem 1rem; text-align: center; background: #fff7ed; color: #9a3412; border-bottom: 1px solid #fed7aa; font-size: .72rem; font-weight: 800; }
+.backend-notice.hidden { display: none; }
+.profile-lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.96); padding: 3.5rem 3rem; }
+.profile-lightbox.hidden { display: none; }
+.profile-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; transition: opacity .15s ease; }
+.profile-lightbox img.loading { opacity: .25; }
+.lightbox-close, .lightbox-arrow { position: absolute; z-index: 2; width: 2.7rem; height: 2.7rem; border-radius: 999px; color: white; background: rgba(255,255,255,.15); font-size: 2rem; line-height: 1; }
+.lightbox-close { top: 1rem; right: 1rem; } .lightbox-prev { left: .7rem; } .lightbox-next { right: .7rem; }
+.lightbox-counter { position: absolute; bottom: 1rem; color: white; font-size: .75rem; font-weight: 800; }
+body.lightbox-open { overflow: hidden; }
+@media (max-width: 640px) { .editor-grid { grid-template-columns: 1fr; } .repeatable-row:has(textarea) { grid-template-columns: 1fr; } .profile-lightbox { padding: 3rem 2.5rem; } }
+
+/* A neutral shimmer remains visible behind lazy-loaded gallery/lightbox images. */
+.gallery-image.image-loading,
+.profile-lightbox img.loading {
+  background: linear-gradient(100deg, #27272a 25%, #52525b 45%, #27272a 65%);
+  background-size: 220% 100%;
+  animation: image-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes image-skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}

@@ -33,8 +33,8 @@ class PostgresApiTests extends PortfolioApiTests {
     @Test
     void migrationsAndApplicationTablesUseTheDedicatedSchema() {
         assertThat(jdbc.queryForObject("select count(*) from pitchr.profiles", Integer.class)).isEqualTo(4);
-        assertThat(jdbc.queryForObject("select count(*) from pitchr.flyway_schema_history where success = true and type = 'SQL'", Integer.class)).isEqualTo(2);
-        assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('profiles', 'swipes', 'visitor_sessions')", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from pitchr.flyway_schema_history where success = true and type = 'SQL'", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('profiles', 'swipes', 'visitor_sessions', 'profile_images', 'profile_image_blobs')", Integer.class)).isZero();
     }
 
     private static EmbeddedPostgres startPostgres() {

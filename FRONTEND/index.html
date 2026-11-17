@@ -78,8 +78,9 @@
         <i data-lucide="sparkles" class="w-4 h-4"></i>
         <span>Welcome to our Showcase</span>
       </div>
+      <!-- The roster loader updates this count after GET /profiles; 4 is the offline fallback count. -->
       <h2 class="text-xl font-extrabold text-zinc-900 leading-snug">
-        Looking for developers? Choose how you want to browse our 4-person team.
+        Looking for developers? Choose how you want to browse our <span id="teamCountHome">4</span>-person team.
       </h2>
       <p class="text-xs text-zinc-600 leading-relaxed">
         Swipe through profiles Tinder-style with interactive physics and match alerts, or view the complete team directory directly.
@@ -109,7 +110,8 @@
             </div>
             <div class="text-left">
               <span class="block">Skip Swiping (All Profiles)</span>
-              <span class="block text-[10px] font-medium text-zinc-400">View all 4 engineers at once</span>
+              <!-- Dynamic roster count keeps the home directory button subtitle accurate. -->
+              <span class="block text-[10px] font-medium text-zinc-400">View all <span id="teamCountButton">4</span> engineers at once</span>
             </div>
           </div>
           <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
@@ -131,9 +133,9 @@
       </div>
     </div>
 
-    <!-- Footer Stats -->
+    <!-- Footer roster count is refreshed from the API, or reflects the four-profile offline fallback. -->
     <div class="flex items-center justify-center gap-6 text-[11px] font-bold text-zinc-400">
-      <span>4 Developers</span>
+      <span><span id="teamCountFooter">4</span> Developers</span>
       <span>•</span>
       <span>Full Stack & ML</span>
       <span>•</span>
@@ -170,6 +172,8 @@
           <i data-lucide="sparkles" class="w-4 h-4"></i>
         </button>
 
+        <!-- Add-card controls are hidden/disabled until the profile API is available. -->
+        <button data-requires-backend type="button" onclick="openProfileEditor()" class="px-3 py-1.5 rounded-full bg-tinder-pink text-white shadow-sm text-xs font-bold">+ Add card</button>
         <button onclick="toggleMatchesDrawer(true)" class="relative px-3 py-1.5 rounded-full bg-white border border-pink-100 shadow-sm flex items-center gap-2 text-zinc-700 hover:text-tinder-pink font-bold text-xs">
           <i data-lucide="heart" class="w-3.5 h-3.5 text-tinder-pink fill-tinder-pink"></i>
           <span>Matches</span>
@@ -186,11 +190,13 @@
           <div class="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mb-4 text-tinder-pink animate-pulse-subtle">
             <i data-lucide="radar" class="w-10 h-10"></i>
           </div>
-          <h3 class="text-2xl font-black text-zinc-800 tracking-tight">You've seen all 4 members!</h3>
+          <!-- Script replaces the initial fallback count whenever the roster is loaded. -->
+          <h3 id="emptyDeckTitle" class="text-2xl font-black text-zinc-800 tracking-tight">You've seen all 4 members!</h3>
           <p class="text-xs text-zinc-500 mt-2 max-w-xs leading-relaxed">
             Ready to build? Review your saved matches or reset the stack.
           </p>
           <div class="flex flex-col gap-2.5 w-full max-w-xs mt-6">
+            <button data-requires-backend type="button" onclick="openProfileEditor()" class="w-full py-3 rounded-2xl bg-white border border-pink-200 text-tinder-pink text-xs font-bold">+ Add card</button>
             <button onclick="resetDeck()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white text-xs font-bold shadow-glow-pink hover:opacity-95">
               Reload Team Cards
             </button>
@@ -239,9 +245,12 @@
         <h2 class="text-2xl font-black text-zinc-900">
           The <span class="bg-gradient-to-r from-tinder-pink to-tinder-coral bg-clip-text text-transparent">Rizz</span><span class="bg-gradient-to-tr from-sky-500 via-tinder-super to-tinder-purple bg-clip-text text-transparent">U</span><span class="bg-gradient-to-r from-tinder-purple to-tinder-pink bg-clip-text text-transparent">me</span> Roster
         </h2>
-        <p class="text-xs font-semibold text-zinc-500">Explore all 4 team members</p>
+        <!-- Directory subtitle count is synchronized with the active API/fallback roster. -->
+        <p class="text-xs font-semibold text-zinc-500">Explore all <span id="directoryCount">4</span> team members</p>
       </div>
       <div class="flex items-center gap-2">
+        <!-- The directory exposes profile creation only while backend writes are available. -->
+        <button data-requires-backend type="button" onclick="openProfileEditor()" class="px-4 py-2 rounded-xl bg-tinder-pink text-white font-bold text-xs">+ Add card</button>
         <button onclick="openQrScanner()" class="px-4 py-2 rounded-xl bg-white border border-pink-200 hover:border-tinder-pink text-tinder-pink font-bold text-xs flex items-center gap-1.5 transition-colors">
           <i data-lucide="qr-code" class="w-4 h-4"></i>
           <span>Scan QR</span>

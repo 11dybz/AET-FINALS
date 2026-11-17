@@ -13,13 +13,15 @@ public class WebConfig implements WebMvcConfigurer {
         this.origins = Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
     }
 
+    /** Allow admin-key and profile-delete requests from the configured separate frontend origins. */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**").allowedOrigins(origins)
-            .allowedMethods("GET", "POST", "PUT", "OPTIONS")
-            .allowedHeaders("Content-Type").allowCredentials(true).maxAge(3600);
+            .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+            .allowedHeaders("Content-Type", "X-Admin-Key").allowCredentials(true).maxAge(3600);
     }
 
+    /** Disable caching for mutable API responses but permit immutable caching for uploaded images. */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new org.springframework.web.servlet.HandlerInterceptor() {
@@ -29,6 +31,6 @@ public class WebConfig implements WebMvcConfigurer {
                 response.setHeader("Cache-Control", "no-store");
                 return true;
             }
-        }).addPathPatterns("/api/**");
+        }).addPathPatterns("/api/**").excludePathPatterns("/api/images/**");
     }
 }
