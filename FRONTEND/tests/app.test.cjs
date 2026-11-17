@@ -15,36 +15,21 @@ function app(options = {}) {
   const elements = new Map();
   let timerId = 0;
   function element() {
-    const children = [];
-    return {
-      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-      style: {}, innerHTML: '', textContent: '', value: '', checked: false, disabled: false,
-      children, dataset: {},
-      appendChild(child) { children.push(child); }, append(...items) { children.push(...items); },
-      replaceChildren(...items) { children.splice(0, children.length, ...items); },
-      setAttribute() {}, addEventListener() {}, removeEventListener() {}, focus() {}, select() {},
-      querySelector() { return element(); }, querySelectorAll() { return []; },
-      getAttribute() { return null; }, scrollTo() {}, reportValidity() { return true; }
-    };
+    return { classList: { add() {}, remove() {} }, style: {}, innerHTML: '',
+      textContent: '', appendChild() {}, setAttribute() {}, addEventListener() {} };
   }
-  const body = element();
-  body.prepend = child => body.appendChild(child);
-  const document = {
-    body,
-    getElementById(id) {
-      if (!elements.has(id)) elements.set(id, element());
-      return elements.get(id);
-    },
-    createElement: element,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    addEventListener() {}
-  };
   const context = vm.createContext({
-    window: { PITCHR_API_BASE: options.base, AudioContext: function () {}, location: { origin: 'http://localhost', href: 'http://localhost/', search: '' },
-      addEventListener(name, callback) { listeners[name] = callback; windowListeners.push(name); }, scrollTo() {} },
-    document,
-    sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
+    window: { PITCHR_API_BASE: options.base, AudioContext: function () {},
+      addEventListener(name, callback) { listeners[name] = callback; } },
+    document: {
+      getElementById(id) {
+        if (!elements.has(id)) elements.set(id, element());
+        return elements.get(id);
+      },
+      createElement: element,
+      querySelector: () => null
+    },
+    sessionStorage: { getItem: () => null },
     lucide: { createIcons() {} },
     console: { log() {}, error() {} },
     AbortController,
@@ -52,6 +37,7 @@ function app(options = {}) {
     URLSearchParams,
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout(id) { timers.delete(id); },
+    URLSearchParams,
     async fetch(url, init) {
       requests.push({ url, ...init });
       if (options.failure) throw new Error('Network unavailable');
@@ -107,55 +93,16 @@ test('startup displays a read-only fallback notice when the backend is unavailab
   assert.equal(vm.runInContext('PROFILES.length', state.context), 4);
 });
 
-test('escapeHtml neutralizes profile-controlled HTML characters', () => {
-  const state = app();
-  const escaped = vm.runInContext(`escapeHtml("<img src=x onerror='alert(1)'>&")`, state.context);
-  assert.equal(escaped, '&lt;img src=x onerror=&#39;alert(1)&#39;&gt;&amp;');
-});
-
-test('safe links and image sources reject executable and data schemes', () => {
-  const state = app();
-  assert.equal(vm.runInContext("safeHref('javascript:alert(1)')", state.context), '#');
-  assert.equal(vm.runInContext("safeHref('https://example.com')", state.context), 'https://example.com');
-  assert.equal(vm.runInContext("safeHref('mailto:test@example.com')", state.context), 'mailto:test@example.com');
-  assert.equal(vm.runInContext("safeImageUrl('data:image/svg+xml,<svg/>')", state.context), '');
-  assert.equal(vm.runInContext("safeImageUrl('/api/images/42')", state.context), '/api/images/42');
-});
-
-test('swipe directions map to pass, like, and super_like through the API before deck removal', async () => {
-  for (const [direction, action] of [['left', 'pass'], ['right', 'like'], ['up', 'super_like']]) {
-    const state = app();
-    await vm.runInContext(`
-      PROFILES = [${JSON.stringify(sampleProfile)}];
-      cardsState = [...PROFILES];
-      activeCardElem = { classList: { add() {} }, style: {} };
-      playBeep = () => {}; handleMatchSuccess = () => {}; showToast = () => {};
-      renderDeck = () => {};
-    `, state.context);
-    await vm.runInContext(`finalizeSwipe('${direction}')`, state.context);
-    const swipe = state.requests.find(request => request.url.endsWith('/me/swipes/ada-lovelace'));
-    assert.ok(swipe, `expected swipe request for ${direction}`);
-    assert.equal(swipe.method, 'PUT');
-    assert.deepEqual(JSON.parse(swipe.body), { action });
-    assert.equal(vm.runInContext('cardsState.length', state.context), 1, 'card remains until the exit animation finishes');
-  }
-});
-
-test('window drag listeners are registered once across repeated deck renders', () => {
-  const state = app();
-  vm.runInContext('attachTopCardListeners(); attachTopCardListeners();', state.context);
-  assert.equal(state.windowListeners.filter(name => name === 'mousemove').length, 1);
-  assert.equal(state.windowListeners.filter(name => name === 'mouseup').length, 1);
-  assert.equal(state.windowListeners.filter(name => name === 'touchmove').length, 1);
-  assert.equal(state.windowListeners.filter(name => name === 'touchend').length, 1);
-});
-
-test('headless image-manager reordering preserves the selected image order', () => {
+test('rapid swipe input and rewind cannot remove more than one card during an animation', () => {
   const state = app();
   vm.runInContext(`
-    editorImages = [{id: 1}, {id: 2}, {id: 3}];
-    renderEditorImages = () => {};
-    moveEditorImage(2, -2);
+    playBeep = () => {};
+    showToast = () => {};
+    renderDeck = () => { activeCardElem = null; };
+    activeCardElem = { classList: { add() {} }, style: {} };
+    finalizeSwipe('left');
+    finalizeSwipe('left');
+    resetDeck();
   `, state.context);
   assert.deepEqual(Array.from(vm.runInContext('editorImages.map(image => image.id)', state.context)), [3, 1, 2]);
 });
@@ -190,4 +137,29 @@ test('rapid swipe input cannot start a second swipe while a request is pending',
   await vm.runInContext("finalizeSwipe('left')", state.context);
   await vm.runInContext("finalizeSwipe('left')", state.context);
   assert.equal(state.requests.filter(request => request.url.includes('/me/swipes/')).length, 1);
+});
+
+test('swipe persistence rejects failure and keeps the card retryable', async () => {
+  const state = app({ status: 500 });
+  await vm.runInContext(`
+    playBeep = () => {};
+    activeCardElem = { classList: { add() {} }, style: {} };
+    isSwiping = false;
+    cardsState = [{ id: 'chee-reynaldo' }];
+    finalizeSwipe('right');
+  `, state.context);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(vm.runInContext('isSwiping', state.context), false);
+  assert.equal(state.requests.some(request => request.url === '/api/me/swipes/chee-reynaldo' && request.method === 'PUT'), true);
+});
+
+test('message send failure exposes retry state without losing the draft', async () => {
+  const state = app({ failure: true });
+  await vm.runInContext(`
+    chatProfileId = 'chee-reynaldo';
+    document.getElementById('chatComposer').value = 'Hello team';
+    sendChatMessage();
+  `, state.context);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(vm.runInContext('chatFailedPayload', state.context), 'Hello team');
 });

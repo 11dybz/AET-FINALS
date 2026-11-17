@@ -32,45 +32,19 @@ async function apiCall(path, method = 'GET', data, options = {}) {
   }
 }
 
-// Keep external links restricted to HTTP(S)/mailto and permit only the local static/API image paths used by this app.
-function safeHref(value) {
-  const candidate = String(value || '').trim();
-  return /^(https?:\/\/|mailto:)/i.test(candidate) ? candidate : '#';
-}
-function safeImageUrl(value) {
-  const candidate = String(value || '').trim();
-  if (/^https?:\/\//i.test(candidate)) return candidate;
-  if (/^\/api\/images\/\d+$/.test(candidate)) return candidate;
-  if (/^\/images\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp|gif)$/i.test(candidate)) return candidate;
-  if (/^images\/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp|gif)$/i.test(candidate)) return candidate;
-  return '';
-}
-
-// Escape every profile-derived value before placing it into an HTML template.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[character]));
-}
-
-// Pull the current roster and match snapshots from the API after the session cookie exists.
-async function refreshProfilesAndMatches() {
-  // Keep the startup contract ordered: roster first, then visitor-specific match snapshots.
-  const profiles = await apiCall('/profiles', 'GET', undefined, { admin: false });
-  PROFILES = profiles.map(profile => ({
-    ...profile,
-    // Preserve member-page shortcuts only for the original four manually maintained portfolios.
-    page: FALLBACK_PROFILES.find(fallback => fallback.id === profile.id)?.page || null,
-    images: Array.isArray(profile.images) ? profile.images : (profile.image ? [{ id: null, url: profile.image }] : [])
-  }));
-  cardsState = [...PROFILES];
-  const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
-  matchedProfiles = matches;
-  backendAvailable = true;
-  showBackendNotice(false);
-  updateDynamicCounts();
-  updateMatchesUI();
-  return PROFILES;
+async function fetchBackendProfiles() {
+  try {
+    const response = await fetch(`${API_BASE}/profiles`, { credentials: 'include' });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length > 0) {
+        // Map backend response fields to your UI cards if needed
+        console.log("Connected to backend profiles successfully!", data);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to connect to backend:", err);
+  }
 }
 
 // 4 SPECIFIED TEAM MEMBERS DATA MODEL
@@ -220,6 +194,13 @@ let currentY = 0;
 let activeCardElem = null;
 let currentlyViewingProfile = null;
 let html5QrScanner = null;
+let chatOpen = false;
+let chatProfileId = null;
+let chatProfileName = '';
+let chatAfterId = 0;
+let chatPollTimer = null;
+let chatLastFocused = null;
+let chatFailedPayload = null;
 
 // ==================== QR CODE SCANNER & DEEP LINKING ====================
 function resolveProfileIdFromQr(rawText) {
@@ -329,7 +310,7 @@ function renderDirectory() {
     card.innerHTML = `
       <div>
         <div class="flex items-center gap-3.5 mb-4">
-          <img src="${escapeHtml(image)}" alt="${escapeHtml(profile.name)}" loading="lazy" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
+          <img src="${profile.image}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
           <div>
             <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${escapeHtml(profile.persona)}</span>
             <h3 class="font-black text-sm text-zinc-900">${escapeHtml(profile.name)}</h3>
@@ -338,7 +319,7 @@ function renderDirectory() {
         </div>
         <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed">${escapeHtml(profile.bio)}</p>
         <div class="flex flex-wrap gap-1 mb-4">
-          ${(profile.tags || []).slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${escapeHtml(tag)}</span>`).join('')}
+          ${profile.tags.slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${tag}</span>`).join('')}
         </div>
       </div>
       <div class="grid grid-cols-1 ${backendAvailable ? 'sm:grid-cols-3' : ''} gap-2">
@@ -425,26 +406,54 @@ function renderDeck() {
     card.setAttribute('data-id', profile.id);
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
-        ${cover ? `<img src="${escapeHtml(cover)}" alt="${escapeHtml(profile.name)}" loading="lazy" class="w-full h-full object-cover" />` : `<div class="w-full h-full bg-gradient-to-br from-pink-500 to-violet-700 flex items-center justify-center text-white text-5xl font-black">${escapeHtml((profile.name || '?').slice(0, 1).toUpperCase())}</div>`}
-        ${imageCount > 1 ? `<span class="absolute top-4 right-4 rounded-full bg-black/65 text-white text-[10px] font-black px-2.5 py-1">▧ ${imageCount}</span>` : ''}
+        <img src="${profile.image}" alt="${profile.name}" class="w-full h-full object-cover" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">HIRE / MATCH</div>
         <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity">PASS</div>
         <div class="stamp-super absolute bottom-14 left-1/2 -translate-x-1/2 border-4 border-sky-400 text-sky-400 font-black text-xl uppercase tracking-wider px-3 py-1 rounded-xl opacity-0 transition-opacity">SUPER LIKE ★</div>
         <div class="absolute top-4 left-4 flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold">Open for Projects</span></div>
         <div class="absolute bottom-3 left-4 right-4 text-white">
-          <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">${escapeHtml(profile.persona)}</span>
-          <div class="flex items-center gap-2"><h2 class="text-xl font-black">${escapeHtml(profile.name)}</h2><span class="text-lg font-medium text-zinc-300">${escapeHtml(profile.age)}</span>${profile.verified ? '<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>' : ''}</div>
-          <p class="text-xs text-zinc-300 font-medium mt-0.5">${escapeHtml(profile.location)}</p>
+          <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
+            ${profile.persona}
+          </span>
+          <div class="flex items-center gap-2">
+            <h2 class="text-xl font-black">${profile.name}</h2>
+            <span class="text-lg font-medium text-zinc-300">${profile.age}</span>
+            ${profile.verified ? `<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>` : ''}
+          </div>
+          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.location}
+          </p>
         </div>
       </div>
+
       <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none">
-        <div class="flex items-center justify-between border-b border-zinc-100 pb-2"><span class="text-xs font-bold text-zinc-800">${escapeHtml(profile.role)}</span><span class="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">${escapeHtml(profile.matchPercentage)}</span></div>
-        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${escapeHtml(profile.bio)}</p>
-        <div class="flex flex-wrap gap-1.5 pt-1">${(profile.tags || []).map(tag => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${escapeHtml(tag)}</span>`).join('')}</div>
-        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1"><span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Match:</span>${(profile.dealbreakers || []).map(item => `<p class="text-[11px] text-zinc-700 font-medium">${escapeHtml(item)}</p>`).join('')}</div>
-        <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">Click card to open full profile →</div>
-      </div>`;
+        <div class="flex items-center justify-between border-b border-zinc-100 pb-2">
+          <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+            <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.role}
+          </span>
+          <span class="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            ${profile.matchPercentage}
+          </span>
+        </div>
+
+        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${profile.bio}</p>
+
+        <div class="flex flex-wrap gap-1.5 pt-1">
+          ${profile.tags.map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${t}</span>`).join('')}
+        </div>
+
+        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1">
+          <span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Match:</span>
+          ${profile.dealbreakers.map(d => `<p class="text-[11px] text-zinc-700 font-medium">${d}</p>`).join('')}
+        </div>
+
+        <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
+          Click card to open full profile &rarr;
+        </div>
+      </div>
+    `;
+
     container.appendChild(card);
   }
   lucide.createIcons();
@@ -557,15 +566,13 @@ function triggerSwipeAction(direction) {
   finalizeSwipe(direction);
 }
 
-// Save the decision first. Only after the API confirms it do we animate away the card or show a match.
-async function finalizeSwipe(direction) {
+function finalizeSwipe(direction) {
   if (!activeCardElem || cardsState.length === 0 || isSwiping) return;
   isSwiping = true;
   hasSwipedOrMoved = true;
   isDragging = false;
   const card = activeCardElem;
   const swipedProfile = cardsState[0];
-  const action = direction === 'left' ? 'pass' : direction === 'right' ? 'like' : 'super_like';
   card.classList.add('card-transition');
   try {
     await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
@@ -631,11 +638,12 @@ function handleMatchSuccess(profile, isSuper) {
   const box = document.getElementById('matchModalBox');
   const subtitle = document.getElementById('matchModalSubtitle');
   const avatar = document.getElementById('matchModalAvatar');
-  avatar.src = safeImageUrl(profile.images?.[0]?.url || profile.image);
-  avatar.alt = profile.name || 'Matched profile';
-  subtitle.textContent = isSuper
-    ? `🔥 SUPER LIKE! Priority match unlocked with ${profile.name}!`
-    : `You and ${profile.name} matched! Review projects or connect directly.`;
+
+  avatar.src = profile.image;
+  subtitle.innerHTML = isSuper 
+    ? `🔥 <strong>SUPER LIKE!</strong> Priority match unlocked with <strong>${profile.name}</strong>!`
+    : `You and <strong>${profile.name}</strong> matched! Review projects or connect directly.`;
+
   modal.classList.remove('opacity-0', 'pointer-events-none');
   box.classList.remove('scale-90');
   box.classList.add('scale-100');
@@ -678,14 +686,11 @@ function openProfileScreen(profile) {
   projectContainer.replaceChildren();
   (profile.details?.projects || []).forEach(project => {
     const item = document.createElement('div');
-    item.className = 'p-3 bg-zinc-50 border border-zinc-100 rounded-xl';
-    const title = document.createElement('h4');
-    title.className = 'text-xs font-bold text-zinc-900';
-    title.textContent = project.title || '';
-    const description = document.createElement('p');
-    description.className = 'text-[11px] text-zinc-500 mt-0.5 leading-relaxed';
-    description.textContent = project.desc || '';
-    item.append(title, description);
+    item.className = "p-3 bg-zinc-50 border border-zinc-100 rounded-xl";
+    item.innerHTML = `
+      <h4 class="text-xs font-bold text-zinc-900">${proj.title}</h4>
+      <p class="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">${proj.desc}</p>
+    `;
     projectContainer.appendChild(item);
   });
   const skills = document.getElementById('detailSkillsContainer');
@@ -935,6 +940,215 @@ function openTopMemberDetail() {
   }
 }
 
+async function openChat(profileId) {
+  chatLastFocused = document.activeElement;
+  chatOpen = true;
+  chatProfileId = profileId || null;
+  const sheet = document.getElementById('chatSheet');
+  sheet.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+  sheet.classList.add('flex');
+  lucide.createIcons();
+  await loadConversations();
+  if (chatProfileId) await openChatThread(chatProfileId);
+  startChatPolling();
+  const composer = document.getElementById('chatComposer');
+  if (chatProfileId) composer.focus();
+  else document.getElementById('chatBackButton').focus();
+}
+
+function closeChat() {
+  chatOpen = false;
+  chatProfileId = null;
+  stopChatPolling();
+  const sheet = document.getElementById('chatSheet');
+  sheet.classList.add('hidden', 'opacity-0', 'pointer-events-none');
+  sheet.classList.remove('flex');
+  if (chatLastFocused && chatLastFocused.focus) chatLastFocused.focus();
+}
+
+async function openChatForProfile(profileId) {
+  toggleMatchesDrawer(false);
+  await openChat(profileId);
+}
+
+async function loadConversations() {
+  if (!chatOpen) return;
+  try {
+    const conversations = await apiCall('/me/conversations');
+    const list = document.getElementById('conversationList');
+    list.replaceChildren();
+    let unreadTotal = 0;
+    for (const conversation of conversations) {
+      unreadTotal += Number(conversation.unreadCount || 0);
+      const profile = conversation.profile;
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'w-full min-h-11 flex items-center gap-3 p-3 rounded-2xl border border-zinc-100 bg-zinc-50 text-left focus:outline-none focus:ring-2 focus:ring-tinder-pink';
+      row.addEventListener('click', () => openChatThread(profile.id));
+      const img = document.createElement('img');
+      img.src = profile.image || '';
+      img.alt = '';
+      img.className = 'w-12 h-12 rounded-xl object-cover';
+      const copy = document.createElement('div');
+      copy.className = 'flex-1 min-w-0';
+      const name = document.createElement('p');
+      name.className = 'font-extrabold text-xs text-zinc-900 truncate';
+      name.textContent = profile.name;
+      const preview = document.createElement('p');
+      preview.className = 'text-[11px] text-zinc-500 truncate';
+      preview.textContent = conversation.lastMessage ? conversation.lastMessage.body : 'Start a conversation';
+      copy.append(name, preview);
+      const badge = document.createElement('span');
+      badge.className = 'hidden';
+      if (conversation.unreadCount > 0) {
+        badge.className = 'min-w-5 h-5 px-1.5 rounded-full bg-tinder-pink text-white text-[10px] font-black flex items-center justify-center';
+        badge.textContent = String(conversation.unreadCount);
+      }
+      row.append(img, copy, badge);
+      list.appendChild(row);
+    }
+    const badge = document.getElementById('messagesUnreadBadge');
+    badge.textContent = unreadTotal ? String(unreadTotal) : '';
+    badge.classList.toggle('hidden', unreadTotal === 0);
+  } catch (err) {
+    showToast('Messages unavailable', 'Try again in a moment');
+  }
+}
+
+async function openChatThread(profileId) {
+  chatProfileId = profileId;
+  chatAfterId = 0;
+  chatFailedPayload = null;
+  const profile = matchedProfiles.find(p => p.id === profileId) || PROFILES.find(p => p.id === profileId);
+  chatProfileName = profile ? profile.name : profileId;
+  document.getElementById('chatTitle').textContent = chatProfileName;
+  document.getElementById('chatSubtitle').textContent = 'Conversation';
+  document.getElementById('conversationList').classList.add('hidden');
+  const thread = document.getElementById('threadView');
+  thread.classList.remove('hidden');
+  thread.classList.add('flex');
+  document.getElementById('messageLog').replaceChildren();
+  await pollChatMessages(true);
+  try { await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`, 'POST'); } catch (e) {}
+  await loadConversations();
+}
+
+async function pollChatMessages(initial = false) {
+  if (!chatOpen || !chatProfileId || document.hidden) return;
+  try {
+    const log = document.getElementById('messageLog');
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    const messages = await apiCall(`/me/conversations/${encodeURIComponent(chatProfileId)}/messages?afterId=${chatAfterId}`);
+    if (messages.length) {
+      let lastDay = '';
+      for (const message of messages) {
+        const day = new Date(message.createdAt).toLocaleDateString();
+        if (day !== lastDay) {
+          const separator = document.createElement('div');
+          separator.className = 'text-center text-[10px] font-bold text-zinc-400 my-2';
+          separator.textContent = day;
+          log.appendChild(separator);
+          lastDay = day;
+        }
+        const bubble = document.createElement('div');
+        bubble.className = `max-w-[82%] rounded-2xl px-3 py-2 ${message.sender === 'visitor' ? 'ml-auto text-white bg-gradient-to-r from-tinder-pink to-tinder-orange' : 'mr-auto bg-white border border-zinc-200 text-zinc-900'}`;
+        bubble.dataset.messageId = String(message.id);
+        const body = document.createElement('p');
+        body.className = 'text-sm whitespace-pre-wrap break-words';
+        body.textContent = message.body;
+        const time = document.createElement('time');
+        time.className = 'block mt-1 text-[9px] opacity-70';
+        time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        bubble.append(body, time);
+        log.appendChild(bubble);
+        chatAfterId = Math.max(chatAfterId, Number(message.id));
+      }
+      if (initial || nearBottom) scrollChatToBottom(true);
+      else document.getElementById('newMessagesPill').classList.remove('hidden');
+    }
+  } catch (err) {}
+}
+
+function scrollChatToBottom(force) {
+  const log = document.getElementById('messageLog');
+  log.scrollTop = log.scrollHeight;
+  document.getElementById('newMessagesPill').classList.add('hidden');
+}
+
+function startChatPolling() {
+  stopChatPolling();
+  chatPollTimer = setInterval(() => {
+    if (chatOpen && !document.hidden) pollChatMessages(false);
+  }, 4000);
+}
+function stopChatPolling() {
+  if (chatPollTimer) clearInterval(chatPollTimer);
+  chatPollTimer = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (chatOpen && !document.hidden) pollChatMessages(false);
+});
+
+function chatComposerInput() {
+  const composer = document.getElementById('chatComposer');
+  composer.style.height = 'auto';
+  composer.style.height = Math.min(composer.scrollHeight, 128) + 'px';
+  document.getElementById('chatCharacterCount').textContent = String(composer.value.length);
+}
+function chatComposerKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventEventDefault ? event.preventEventDefault() : event.preventDefault();
+    sendChatMessage();
+  }
+}
+async function sendChatMessage() {
+  if (!chatProfileId) return;
+  const composer = document.getElementById('chatComposer');
+  const sendButton = document.getElementById('chatSendButton');
+  const body = composer.value.trim();
+  if (!body) return;
+  sendButton.disabled = true;
+  composer.disabled = true;
+  document.getElementById('chatError').classList.add('hidden');
+  const optimistic = appendOptimisticMessage(body);
+  try {
+    const sent = await apiCall(`/me/conversations/${encodeURIComponent(chatProfileId)}/messages`, 'POST', { body });
+    optimistic.dataset.messageId = String(sent.id);
+    chatAfterId = Math.max(chatAfterId, Number(sent.id));
+    composer.value = '';
+    chatComposerInput();
+  } catch (err) {
+    optimistic.classList.add('opacity-60');
+    chatFailedPayload = body;
+    document.getElementById('chatErrorText').textContent = err.message || 'Could not send message';
+    document.getElementById('chatError').classList.remove('hidden');
+  } finally {
+    sendButton.disabled = false;
+    composer.disabled = false;
+  }
+}
+function appendOptimisticMessage(body) {
+  const log = document.getElementById('messageLog');
+  const bubble = document.createElement('div');
+  bubble.className = 'max-w-[82%] ml-auto rounded-2xl px-3 py-2 text-white bg-gradient-to-r from-tinder-pink to-tinder-orange';
+  const text = document.createElement('p');
+  text.className = 'text-sm whitespace-pre-wrap break-words';
+  text.textContent = body;
+  bubble.appendChild(text);
+  log.appendChild(bubble);
+  scrollChatToBottom(true);
+  return bubble;
+}
+async function retryChatSend() {
+  if (!chatFailedPayload) return;
+  document.getElementById('chatComposer').value = chatFailedPayload;
+  await sendChatMessage();
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && chatOpen) closeChat();
+});
+
 // MATCHES DRAWER
 function toggleMatchesDrawer(show) {
   const drawer = document.getElementById('matchesDrawer');
@@ -960,407 +1174,33 @@ function updateMatchesUI() {
   } else {
     matchedProfiles.forEach(item => {
       const row = document.createElement('div');
-      row.className = 'flex items-center gap-3 p-3 bg-zinc-50 hover:bg-pink-50/50 rounded-2xl border border-zinc-100 transition-colors cursor-pointer';
-      const image = safeImageUrl(item.images?.[0]?.url || item.image);
-      row.innerHTML = `<img src="${escapeHtml(image)}" alt="${escapeHtml(item.name)}" loading="lazy" class="w-12 h-12 rounded-xl object-cover"><div class="flex-1 min-w-0"><div class="flex items-center gap-1.5"><h4 class="font-extrabold text-xs text-zinc-900 truncate">${escapeHtml(item.name)}</h4>${item.isSuper ? '<span class="text-[9px] bg-sky-100 text-sky-600 px-1.5 py-0.2 rounded font-black">SUPER</span>' : ''}</div><p class="text-[11px] text-zinc-500 truncate">${escapeHtml(item.role)}</p></div>`;
-      row.addEventListener('click', () => { toggleMatchesDrawer(false); openProfileScreen(item); });
-      const contact = document.createElement('button');
-      contact.type = 'button'; contact.className = 'px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold';
-      contact.textContent = 'Ping';
-      contact.addEventListener('click', event => {
-        event.stopPropagation();
-        const email = item.details?.email;
-        if (email) directContactProfile(email);
-      });
-      row.appendChild(contact);
+      row.className = "flex items-center gap-3 p-3 bg-zinc-50 hover:bg-pink-50/50 rounded-2xl border border-zinc-100 transition-colors cursor-pointer";
+      row.onclick = () => {
+        toggleMatchesDrawer(false);
+        openProfileScreen(item);
+      };
+      row.innerHTML = `
+        <img src="${item.image}" class="w-12 h-12 rounded-xl object-cover" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <h4 class="font-extrabold text-xs text-zinc-900 truncate">${item.name}</h4>
+            ${item.isSuper ? `<span class="text-[9px] bg-sky-100 text-sky-600 px-1.5 py-0.2 rounded font-black">SUPER</span>` : ''}
+          </div>
+          <p class="text-[11px] text-zinc-500 truncate">${item.role}</p>
+        </div>
+        <button onclick="event.stopPropagation(); directContactProfile('${item.details.email}')" class="px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold hover:bg-tinder-coral transition-colors flex items-center gap-1">
+          <i data-lucide="mail" class="w-3.5 h-3.5"></i>
+          <span>Ping</span>
+        </button>
+      `;
       list.appendChild(row);
     });
   }
+
   lucide.createIcons();
 }
 
-// Update roster labels whenever a successful API load changes the number of cards.
-function updateDynamicCounts() {
-  const count = PROFILES.length;
-  ['teamCountHome', 'teamCountButton', 'teamCountFooter', 'directoryCount'].forEach(id => {
-    const node = document.getElementById(id);
-    if (node) node.textContent = count;
-  });
-  const emptyTitle = document.getElementById('emptyDeckTitle');
-  if (emptyTitle) emptyTitle.textContent = `You've seen all ${count} members!`;
-}
-
-// Show a persistent read-only notice when the API is unavailable; hide all management entry points.
-function showBackendNotice(show) {
-  let notice = document.getElementById('backendNotice');
-  if (!notice) {
-    notice = document.createElement('div');
-    notice.id = 'backendNotice';
-    notice.className = 'backend-notice';
-    notice.textContent = 'Backend unavailable — showing a read-only fallback roster. Profile editing is disabled.';
-    document.body.prepend(notice);
-  }
-  notice.classList.toggle('hidden', !show);
-  // The controls stay unavailable until the API has loaded successfully; this also covers the brief startup window.
-  const readOnly = show || !backendAvailable;
-  document.querySelectorAll('[data-requires-backend]').forEach(button => {
-    button.disabled = readOnly;
-    button.classList.toggle('hidden', readOnly);
-  });
-}
-
-// Build the editor shell once. Its static markup contains no profile values; those are assigned as DOM properties.
-function ensureEditorModal() {
-  let modal = document.getElementById('profileEditorModal');
-  if (modal) return modal;
-  modal = document.createElement('div');
-  modal.id = 'profileEditorModal';
-  modal.className = 'app-modal hidden';
-  modal.innerHTML = `
-    <div class="app-modal-panel editor-panel" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
-      <div class="flex items-center justify-between gap-3 mb-4"><h2 id="editorTitle" class="text-lg font-black">Add profile</h2><button type="button" data-close class="editor-close" aria-label="Close editor">×</button></div>
-      <form id="profileEditorForm" class="space-y-4">
-        <div class="editor-grid">
-          <label>Name *<input id="editName" required minlength="1" maxlength="100"></label>
-          <label>Age *<input id="editAge" type="number" min="16" max="120" required></label>
-          <label>Persona<input id="editPersona" maxlength="255"></label>
-          <label>Role<input id="editRole" maxlength="255"></label>
-          <label>Location<input id="editLocation" maxlength="255"></label>
-          <label>Match percentage<input id="editMatchPercentage" maxlength="255" placeholder="New"></label>
-        </div>
-        <label class="block">Short bio<textarea id="editBio" maxlength="2000" rows="3"></textarea></label>
-        <label class="block">Full bio<textarea id="editFullBio" maxlength="4000" rows="4"></textarea></label>
-        <label class="inline-flex items-center gap-2 text-sm"><input id="editVerified" type="checkbox"> Verified profile</label>
-        <div><div class="editor-section-heading"><span>Tags (max 15)</span><button type="button" data-add="tags">+ Add tag</button></div><div id="editTags" class="repeatable-list"></div></div>
-        <div><div class="editor-section-heading"><span>Highlights / Why you should match (max 10)</span><button type="button" data-add="highlights">+ Add highlight</button></div><div id="editHighlights" class="repeatable-list"></div></div>
-        <div><div class="editor-section-heading"><span>Projects (max 10)</span><button type="button" data-add="projects">+ Add project</button></div><div id="editProjects" class="repeatable-list"></div></div>
-        <div class="editor-grid">
-          <label>GitHub URL<input id="editGithub" type="url" placeholder="https://github.com/..."></label>
-          <label>LinkedIn URL<input id="editLinkedin" type="url" placeholder="https://linkedin.com/..."></label>
-          <label>Email<input id="editEmail" type="email" maxlength="255"></label>
-        </div>
-        <section class="image-manager">
-          <div class="editor-section-heading"><span>Profile pictures (max 8)</span><span id="editorImageCount" class="text-xs text-zinc-400">0/8</span></div>
-          <div id="editorImageGrid" class="editor-image-grid"></div>
-          <div class="flex flex-wrap gap-2 mt-3"><label class="upload-picker">Add images<input id="editorImageFiles" type="file" accept="image/*" multiple></label><input id="editorImageUrl" type="url" placeholder="https://example.com/photo.jpg" class="editor-url-input"><button id="editorAddUrl" type="button" class="editor-secondary">Add URL</button></div>
-          <p id="editorUploadStatus" class="text-xs text-zinc-500 mt-2" aria-live="polite"></p>
-        </section>
-        <p id="editorError" class="text-sm text-rose-600" role="alert"></p>
-        <div class="flex justify-end gap-2 pt-3 border-t"><button type="button" data-close class="editor-secondary">Cancel</button><button id="editorSave" type="submit" class="editor-primary">Save profile</button></div>
-      </form>
-    </div>`;
-  document.body.appendChild(modal);
-  modal.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeProfileEditor));
-  modal.querySelector('[data-add="tags"]').addEventListener('click', () => addRepeatableRow('tags'));
-  modal.querySelector('[data-add="highlights"]').addEventListener('click', () => addRepeatableRow('highlights'));
-  modal.querySelector('[data-add="projects"]').addEventListener('click', () => addRepeatableRow('projects'));
-  modal.querySelector('#editorImageFiles').addEventListener('change', event => {
-    const selected = Array.from(event.target.files || []);
-    if (editorImages.length + selected.length > 8) {
-      document.getElementById('editorError').textContent = 'A profile can have at most 8 images.';
-      event.target.value = '';
-      return;
-    }
-    selected.forEach(file => editorImages.push({ kind: 'file', file, label: file.name }));
-    event.target.value = '';
-    markEditorDirty();
-    renderEditorImages();
-  });
-  modal.querySelector('#editorAddUrl').addEventListener('click', () => {
-    const input = modal.querySelector('#editorImageUrl');
-    const url = input.value.trim();
-    if (!/^https?:\/\//i.test(url)) {
-      document.getElementById('editorError').textContent = 'Image URLs must start with http:// or https://.';
-      return;
-    }
-    if (editorImages.length >= 8) {
-      document.getElementById('editorError').textContent = 'A profile can have at most 8 images.';
-      return;
-    }
-    editorImages.push({ kind: 'url', url, label: url });
-    input.value = '';
-    markEditorDirty();
-    renderEditorImages();
-  });
-  modal.querySelector('#profileEditorForm').addEventListener('input', markEditorDirty);
-  modal.querySelector('#profileEditorForm').addEventListener('submit', saveProfileEditor);
-  return modal;
-}
-
-// Create repeatable safe text inputs for skills/highlights and paired title/description project fields.
-function addRepeatableRow(type, first = '', second = '') {
-  const containerId = type === 'tags' ? 'editTags' : type === 'highlights' ? 'editHighlights' : 'editProjects';
-  const container = document.getElementById(containerId);
-  if (container.children.length >= (type === 'tags' ? 15 : 10)) return;
-  const row = document.createElement('div');
-  row.className = 'repeatable-row';
-  if (type === 'projects') {
-    const title = document.createElement('input'); title.maxLength = 255; title.placeholder = 'Project title'; title.value = first;
-    const desc = document.createElement('textarea'); desc.maxLength = 2000; desc.placeholder = 'Project description'; desc.value = second; desc.rows = 2;
-    row.append(title, desc);
-  } else {
-    const input = document.createElement('input'); input.maxLength = type === 'tags' ? 50 : 300;
-    input.placeholder = type === 'tags' ? 'Skill or technology' : 'Why this person is a strong match';
-    input.value = first;
-    row.appendChild(input);
-  }
-  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.className = 'editor-remove';
-  remove.addEventListener('click', () => { row.remove(); markEditorDirty(); });
-  row.appendChild(remove);
-  row.querySelectorAll('input,textarea').forEach(field => field.addEventListener('input', markEditorDirty));
-  container.appendChild(row);
-}
-
-// Populate the editor from an existing profile or an empty create model.
-function openProfileEditor(profile = null) {
-  if (!backendAvailable) return;
-  const modal = ensureEditorModal();
-  editorOriginalProfile = profile;
-  editorDirty = false;
-  editorImages = (profile?.images || []).map(image => ({ kind: 'existing', id: image.id, url: image.url, label: image.url }));
-  ['editTags', 'editHighlights', 'editProjects'].forEach(id => document.getElementById(id).replaceChildren());
-  const value = (id, content) => { document.getElementById(id).value = content ?? ''; };
-  value('editName', profile?.name); value('editAge', profile?.age ?? 22);
-  value('editPersona', profile?.persona); value('editRole', profile?.role); value('editLocation', profile?.location);
-  value('editMatchPercentage', profile?.matchPercentage || 'New'); value('editBio', profile?.bio);
-  value('editFullBio', profile?.details?.fullBio); value('editGithub', profile?.details?.github);
-  value('editLinkedin', profile?.details?.linkedin); value('editEmail', profile?.details?.email);
-  document.getElementById('editVerified').checked = Boolean(profile?.verified);
-  (profile?.tags || []).forEach(tag => addRepeatableRow('tags', tag));
-  (profile?.dealbreakers || []).forEach(item => addRepeatableRow('highlights', item));
-  (profile?.details?.projects || []).forEach(project => addRepeatableRow('projects', project.title, project.desc));
-  document.getElementById('editorTitle').textContent = profile ? `Edit ${profile.name}` : 'Add profile';
-  document.getElementById('editorSave').textContent = profile ? 'Save changes' : 'Create profile';
-  document.getElementById('editorError').textContent = '';
-  document.getElementById('editorUploadStatus').textContent = '';
-  renderEditorImages();
-  modal.classList.remove('hidden');
-  document.getElementById('editName').focus();
-}
-
-// Track every form/image interaction so closing cannot silently discard unsaved edits.
-function markEditorDirty() { editorDirty = true; }
-async function closeProfileEditor() {
-  const modal = document.getElementById('profileEditorModal');
-  if (!modal) return;
-  if (editorDirty) {
-    const discard = await styledConfirm('Discard unsaved changes?', 'Your profile edits and pending image changes will be lost.');
-    if (!discard) return;
-  }
-  modal.classList.add('hidden');
-  editorDirty = false;
-}
-
-// Render reorderable image previews with drag/drop and explicit up/down controls for touch devices.
-function renderEditorImages() {
-  const grid = document.getElementById('editorImageGrid');
-  if (!grid) return;
-  grid.replaceChildren();
-  editorImages.forEach((item, index) => {
-    const tile = document.createElement('div');
-    tile.className = 'editor-image-tile'; tile.draggable = true; tile.dataset.index = index;
-    const image = document.createElement('img');
-    image.alt = `Profile image ${index + 1}`;
-    image.loading = 'lazy';
-    if (item.kind === 'file' && typeof URL !== 'undefined' && URL.createObjectURL) image.src = URL.createObjectURL(item.file);
-    else image.src = safeImageUrl(item.url);
-    tile.appendChild(image);
-    if (index === 0) { const cover = document.createElement('span'); cover.className = 'cover-badge'; cover.textContent = 'Cover'; tile.appendChild(cover); }
-    const controls = document.createElement('div'); controls.className = 'editor-image-controls';
-    [['↑', -1, 'Move image up'], ['↓', 1, 'Move image down']].forEach(([label, direction, aria]) => {
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.setAttribute('aria-label', aria);
-      button.disabled = index + direction < 0 || index + direction >= editorImages.length;
-      button.addEventListener('click', () => moveEditorImage(index, direction)); controls.appendChild(button);
-    });
-    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove image');
-    remove.addEventListener('click', () => { editorImages.splice(index, 1); markEditorDirty(); renderEditorImages(); });
-    controls.appendChild(remove); tile.appendChild(controls);
-    tile.addEventListener('dragstart', event => { event.dataTransfer.setData('text/plain', String(index)); });
-    tile.addEventListener('dragover', event => event.preventDefault());
-    tile.addEventListener('drop', event => { event.preventDefault(); moveEditorImage(Number(event.dataTransfer.getData('text/plain')), index, true); });
-    grid.appendChild(tile);
-  });
-  document.getElementById('editorImageCount').textContent = `${editorImages.length}/8`;
-}
-function moveEditorImage(from, to, absolute = false) {
-  const target = absolute ? to : from + to;
-  if (target < 0 || target >= editorImages.length || from === target) return;
-  const [item] = editorImages.splice(from, 1);
-  editorImages.splice(target, 0, item);
-  markEditorDirty(); renderEditorImages();
-}
-
-// Downscale a browser image to at most 1600 px and JPEG quality 0.85 when Canvas APIs are available.
-async function downscaleImage(file) {
-  if (!file || typeof createImageBitmap !== 'function' || typeof document.createElement !== 'function') return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const ratio = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-    canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
-    const context = canvas.getContext('2d');
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close?.();
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-    return blob ? new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
-  } catch (error) { return file; }
-}
-
-// Validate client-side limits and save JSON first, then upload gallery items and apply the requested order.
-async function saveProfileEditor(event) {
-  event.preventDefault();
-  const form = document.getElementById('profileEditorForm');
-  if (!form.reportValidity()) return;
-  if (editorImages.length > 8) { document.getElementById('editorError').textContent = 'A profile can have at most 8 images.'; return; }
-  const readRows = (id, paired = false) => Array.from(document.getElementById(id).children).map(row => {
-    const fields = row.querySelectorAll('input,textarea');
-    return paired ? { title: fields[0].value.trim(), desc: fields[1].value.trim() } : fields[0].value.trim();
-  }).filter(row => paired ? row.title || row.desc : row);
-  const payload = {
-    name: document.getElementById('editName').value.trim(), age: Number(document.getElementById('editAge').value),
-    persona: document.getElementById('editPersona').value.trim(), role: document.getElementById('editRole').value.trim(),
-    location: document.getElementById('editLocation').value.trim(), matchPercentage: document.getElementById('editMatchPercentage').value.trim() || 'New',
-    verified: document.getElementById('editVerified').checked, bio: document.getElementById('editBio').value,
-    tags: readRows('editTags'), dealbreakers: readRows('editHighlights'),
-    details: { fullBio: document.getElementById('editFullBio').value, projects: readRows('editProjects', true),
-      github: document.getElementById('editGithub').value.trim(), linkedin: document.getElementById('editLinkedin').value.trim(),
-      email: document.getElementById('editEmail').value.trim() }
-  };
-  const urlFields = [payload.details.github, payload.details.linkedin].filter(Boolean);
-  if (urlFields.some(url => !/^https?:\/\//i.test(url))) {
-    document.getElementById('editorError').textContent = 'GitHub and LinkedIn must use http:// or https:// URLs.'; return;
-  }
-  if (payload.details.projects.length > 10 || payload.tags.length > 15 || payload.dealbreakers.length > 10) {
-    document.getElementById('editorError').textContent = 'The maximum number of tags, highlights, or projects was exceeded.'; return;
-  }
-  const saveButton = document.getElementById('editorSave');
-  saveButton.disabled = true; saveButton.textContent = 'Saving…';
-  document.getElementById('editorError').textContent = '';
-  try {
-    const saved = await runAdminAction(() => editorOriginalProfile
-      ? apiCall(`/profiles/${encodeURIComponent(editorOriginalProfile.id)}`, 'PUT', payload)
-      : apiCall('/profiles', 'POST', payload));
-    const profileId = saved.id;
-    const originalIds = new Set((editorOriginalProfile?.images || []).map(image => image.id));
-    const retainedIds = new Set(editorImages.filter(item => item.kind === 'existing').map(item => item.id));
-    for (const imageId of originalIds) if (!retainedIds.has(imageId)) {
-      await runAdminAction(() => apiCall(`/profiles/${encodeURIComponent(profileId)}/images/${imageId}`, 'DELETE'));
-    }
-    const resolvedIds = new Map();
-    const failedItems = [];
-    let completedUploads = 0;
-    for (const item of editorImages) {
-      if (item.kind === 'existing') resolvedIds.set(item, item.id);
-      else if (item.kind === 'file') {
-        try {
-          const file = await downscaleImage(item.file);
-          const multipart = new FormData(); multipart.append('files', file, file.name || 'profile.jpg');
-          // Sequential uploads provide a clear per-file progress count without racing gallery ordering.
-          document.getElementById('editorUploadStatus').textContent = `Uploading ${file.name || 'image'} (${completedUploads + 1} pending upload item)…`;
-          const result = await runAdminAction(() => apiCall(`/profiles/${encodeURIComponent(profileId)}/images`, 'POST', multipart));
-          resolvedIds.set(item, result[0].id);
-          completedUploads++;
-          document.getElementById('editorUploadStatus').textContent = `Uploaded ${completedUploads} image item(s).`;
-        } catch (error) { item.error = error.message; failedItems.push(item); }
-      } else if (item.kind === 'url') {
-        try {
-          document.getElementById('editorUploadStatus').textContent = `Adding image URL (${completedUploads + 1} pending upload item)…`;
-          const result = await runAdminAction(() => apiCall(`/profiles/${encodeURIComponent(profileId)}/images`, 'POST', { url: item.url }));
-          resolvedIds.set(item, result[0].id);
-          completedUploads++;
-          document.getElementById('editorUploadStatus').textContent = `Uploaded ${completedUploads} image item(s).`;
-        } catch (error) { item.error = error.message; failedItems.push(item); }
-      }
-    }
-    const orderedIds = editorImages.filter(item => resolvedIds.has(item)).map(item => resolvedIds.get(item));
-    if (orderedIds.length) await runAdminAction(() => apiCall(`/profiles/${encodeURIComponent(profileId)}/images/order`, 'PUT', { imageIds: orderedIds }));
-    await refreshProfilesAndMatches();
-    renderDeck(); renderDirectory();
-    document.getElementById('profileEditorModal').classList.add('hidden');
-    editorDirty = false;
-    if (failedItems.length) {
-      const updated = PROFILES.find(profile => profile.id === profileId);
-      openProfileEditor(updated);
-      editorImages.push(...failedItems);
-      renderEditorImages();
-      document.getElementById('editorUploadStatus').textContent = failedItems.map(item => `${item.label}: ${item.error || 'Upload failed'}`).join(' • ');
-      showToast('Profile saved', `${failedItems.length} image upload(s) failed. Retry from the editor.`);
-    } else showToast(editorOriginalProfile ? 'Profile updated' : 'Profile created', 'Changes saved to the backend.');
-    if (currentlyViewingProfile?.id === profileId) {
-      const updated = PROFILES.find(profile => profile.id === profileId);
-      if (updated) openProfileScreen(updated);
-    }
-  } catch (error) {
-    document.getElementById('editorError').textContent = error.message || 'Could not save this profile.';
-  } finally {
-    saveButton.disabled = false;
-    saveButton.textContent = editorOriginalProfile ? 'Save changes' : 'Create profile';
-  }
-}
-
-// Retry a protected write once after an optional admin-key modal; key is kept only in this page's memory.
-async function runAdminAction(action) {
-  try { return await action(); }
-  catch (error) {
-    if (error.status !== 403) throw error;
-    const key = await requestAdminKey();
-    if (!key) throw new Error('Admin key entry cancelled.');
-    adminKey = key;
-    return action();
-  }
-}
-function requestAdminKey() {
-  return new Promise(resolve => {
-    let modal = document.getElementById('adminKeyModal');
-    if (!modal) {
-      modal = document.createElement('div'); modal.id = 'adminKeyModal'; modal.className = 'app-modal';
-      modal.innerHTML = '<div class="app-modal-panel max-w-sm" role="dialog" aria-modal="true"><h3 class="font-black text-lg mb-2">Admin key required</h3><p class="text-xs text-zinc-500 mb-3">Enter the configured X-Admin-Key. It remains in memory only.</p><input id="adminKeyInput" type="password" autocomplete="off" class="editor-text-input" aria-label="Admin key"><p id="adminKeyError" class="text-xs text-rose-600 mt-2"></p><div class="flex justify-end gap-2 mt-4"><button type="button" data-cancel class="editor-secondary">Cancel</button><button type="button" data-submit class="editor-primary">Retry</button></div></div>';
-      document.body.appendChild(modal);
-    }
-    const input = modal.querySelector('#adminKeyInput'); input.value = '';
-    modal.classList.remove('hidden'); input.focus();
-    const finish = value => { modal.classList.add('hidden'); modal.querySelector('[data-cancel]').onclick = null; modal.querySelector('[data-submit]').onclick = null; resolve(value); };
-    modal.querySelector('[data-cancel]').onclick = () => finish(null);
-    modal.querySelector('[data-submit]').onclick = () => finish(input.value.trim() || null);
-    input.onkeydown = event => { if (event.key === 'Enter') finish(input.value.trim() || null); };
-  });
-}
-
-// Styled confirmation modal replaces native confirm() for destructive actions and unsaved changes.
-function styledConfirm(title, message) {
-  return new Promise(resolve => {
-    let modal = document.getElementById('confirmModal');
-    if (!modal) {
-      modal = document.createElement('div'); modal.id = 'confirmModal'; modal.className = 'app-modal';
-      modal.innerHTML = '<div class="app-modal-panel max-w-sm" role="dialog" aria-modal="true"><h3 id="confirmTitle" class="font-black text-lg"></h3><p id="confirmMessage" class="text-sm text-zinc-500 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" data-cancel class="editor-secondary">Cancel</button><button type="button" data-yes class="editor-danger">Continue</button></div></div>';
-      document.body.appendChild(modal);
-    }
-    modal.querySelector('#confirmTitle').textContent = title;
-    modal.querySelector('#confirmMessage').textContent = message;
-    modal.classList.remove('hidden');
-    const finish = answer => { modal.classList.add('hidden'); modal.querySelector('[data-cancel]').onclick = null; modal.querySelector('[data-yes]').onclick = null; resolve(answer); };
-    modal.querySelector('[data-cancel]').onclick = () => finish(false);
-    modal.querySelector('[data-yes]').onclick = () => finish(true);
-  });
-}
-
-// Deletion is intentionally explicit and refreshes the deck, directory, and visitor-specific matches.
-async function confirmDeleteProfile(profile) {
-  if (!backendAvailable) return;
-  if (!await styledConfirm(`Delete ${profile.name}?`, 'This permanently removes the profile, gallery, and related swipe/match records.')) return;
-  try {
-    await runAdminAction(() => apiCall(`/profiles/${encodeURIComponent(profile.id)}`, 'DELETE'));
-    PROFILES = PROFILES.filter(item => item.id !== profile.id);
-    cardsState = cardsState.filter(item => item.id !== profile.id);
-    if (currentlyViewingProfile?.id === profile.id) closeProfileScreen();
-    await refreshProfilesAndMatches();
-    renderDeck(); renderDirectory();
-    showToast('Profile deleted', `${profile.name} was removed.`);
-  } catch (error) { showToast('Delete failed', error.message); }
-}
-
-async function resetDeck() {
+function resetDeck() {
   if (isSwiping) return;
   try {
     await refreshProfilesAndMatches();
@@ -1443,39 +1283,29 @@ window.addEventListener('DOMContentLoaded', async () => {
     updateMatchesUI();
   }
 
-  // Resolve deep links only after the active roster has been loaded from the API or fallback.
+  // Check if opened via QR link (e.g., ?profile=fontelar-dave)
   const urlParams = new URLSearchParams(window.location.search);
   const qrProfileId = urlParams.get('profile');
-  if (qrProfileId && PROFILES.some(profile => profile.id === qrProfileId)) openProfileScreenById(qrProfileId);
-
-  // Re-hydrate the last visible application mode after startup data is available.
-  let mode = null;
-  try { mode = sessionStorage.getItem('pitchrMode'); } catch (error) {}
-  if (mode === 'swipe' || mode === 'directory') startMode(mode);
-  else {
-    renderDeck();
-    renderDirectory();
-  }
-});
-
-// Keyboard controls support gallery navigation, lightbox dismissal, and a basic lightbox focus trap.
-document.addEventListener('keydown', event => {
-  const lightbox = document.getElementById('profileLightbox');
-  if (lightbox && !lightbox.classList.contains('hidden')) {
-    if (event.key === 'Escape') { closeLightbox(); event.preventDefault(); }
-    else if (event.key === 'ArrowLeft') { moveLightbox(-1); event.preventDefault(); }
-    else if (event.key === 'ArrowRight') { moveLightbox(1); event.preventDefault(); }
-    else if (event.key === 'Tab') {
-      const controls = Array.from(lightbox.querySelectorAll('button:not([hidden])'));
-      if (controls.length && event.shiftKey && document.activeElement === controls[0]) {
-        controls[controls.length - 1].focus(); event.preventDefault();
-      } else if (controls.length && !event.shiftKey && document.activeElement === controls[controls.length - 1]) {
-        controls[0].focus(); event.preventDefault();
-      }
-    }
+  if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
+    openProfileScreenById(qrProfileId);
     return;
   }
-  if (event.key === 'Escape') closeProfileScreen();
-  if (event.key === 'ArrowLeft' && document.getElementById('fullProfileScreen')?.classList.contains('flex')) moveGallery(-1);
-  if (event.key === 'ArrowRight' && document.getElementById('fullProfileScreen')?.classList.contains('flex')) moveGallery(1);
+
+  // 1. Initialize or resume session with backend safely inside an async function
+  try {
+    await apiCall('/session', 'POST');
+  } catch (err) {
+    console.error("Session init error:", err);
+    showToast('Backend unavailable', 'You can still explore the team.');
+  }
+
+  // 2. Load mode state
+  let mode = null;
+  try {
+    mode = sessionStorage.getItem('pitchrMode');
+  } catch (e) {}
+
+  if (mode === 'swipe' || mode === 'directory') {
+    startMode(mode);
+  }
 });

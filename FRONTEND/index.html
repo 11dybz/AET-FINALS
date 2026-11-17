@@ -179,6 +179,10 @@
           <span>Matches</span>
           <span id="matchBadge" class="w-4 h-4 rounded-full bg-tinder-pink text-white text-[9px] font-black flex items-center justify-center">0</span>
         </button>
+        <button onclick="openChat()" class="relative w-9 h-9 min-h-11 rounded-full bg-white border border-pink-100 shadow-sm flex items-center justify-center text-zinc-600 hover:text-tinder-pink" aria-label="Open messages">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          <span id="messagesUnreadBadge" class="hidden absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-tinder-pink text-white text-[9px] font-black items-center justify-center"></span>
+        </button>
       </div>
     </header>
 
@@ -324,6 +328,40 @@
       </button>
     </div>
   </aside>
+
+  <!-- CHAT SHEET -->
+  <section id="chatSheet" class="fixed inset-0 z-[60] bg-white opacity-0 pointer-events-none transition-opacity duration-200 hidden flex-col" role="dialog" aria-modal="true" aria-label="Messages">
+    <header class="h-14 px-3 border-b border-zinc-100 flex items-center gap-2 bg-white">
+      <button id="chatBackButton" onclick="closeChat()" class="w-11 h-11 rounded-full flex items-center justify-center text-zinc-700 focus:outline-none focus:ring-2 focus:ring-tinder-pink" aria-label="Close messages">
+        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+      </button>
+      <div class="flex-1 min-w-0">
+        <h2 id="chatTitle" class="font-extrabold text-sm text-zinc-900">Messages</h2>
+        <p id="chatSubtitle" class="text-[11px] text-zinc-500"></p>
+      </div>
+    </header>
+    <div id="chatBody" class="flex-1 min-h-0 flex">
+      <div id="conversationList" class="w-full overflow-y-auto p-3 space-y-2"></div>
+      <div id="threadView" class="hidden w-full min-h-0 flex-col">
+        <div id="messageLog" class="flex-1 overflow-y-auto p-4 space-y-3" role="log" aria-live="polite" aria-label="Conversation messages"></div>
+        <button id="newMessagesPill" onclick="scrollChatToBottom(true)" class="hidden absolute left-1/2 bottom-24 -translate-x-1/2 px-3 py-2 rounded-full bg-zinc-900 text-white text-xs font-bold">New messages</button>
+        <div class="border-t border-zinc-100 p-3 bg-white">
+          <div id="chatError" class="hidden mb-2 text-xs text-rose-600 flex items-center justify-between" role="alert">
+            <span id="chatErrorText"></span>
+            <button id="chatRetryButton" onclick="retryChatSend()" class="min-h-11 px-3 font-bold underline">Retry</button>
+          </div>
+          <div class="flex items-end gap-2">
+            <label for="chatComposer" class="sr-only">Message</label>
+            <textarea id="chatComposer" rows="1" maxlength="1000" class="flex-1 resize-none max-h-32 rounded-2xl border border-zinc-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-tinder-pink" placeholder="Write a message..." onkeydown="chatComposerKeydown(event)" oninput="chatComposerInput()"></textarea>
+            <button id="chatSendButton" onclick="sendChatMessage()" class="w-11 h-11 min-h-11 rounded-full bg-gradient-to-r from-tinder-pink to-tinder-orange text-white flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-tinder-pink" aria-label="Send message">
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div class="mt-1 text-right text-[10px] text-zinc-400"><span id="chatCharacterCount">0</span>/1000</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- FULL PROFILE SCREEN OVERLAY -->
   <section id="fullProfileScreen" class="fixed inset-0 z-50 bg-white overflow-y-auto hidden flex-col">

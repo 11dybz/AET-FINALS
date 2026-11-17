@@ -1,7 +1,10 @@
 package com.pitchr.backend;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -47,43 +50,23 @@ public class PortfolioController {
     private final PortfolioService service;
     private final String teamEmail;
     private final boolean secureCookie;
-    private final String adminKey;
 
     public PortfolioController(PortfolioService service, @Value("${pitchr.team-email}") String teamEmail,
-                               @Value("${pitchr.cookie-secure}") boolean secureCookie,
-                               @Value("${pitchr.admin-key:}") String adminKey) {
+                               @Value("${pitchr.cookie-secure}") boolean secureCookie) {
         this.service = service;
         this.teamEmail = teamEmail;
         this.secureCookie = secureCookie;
-        this.adminKey = adminKey == null ? "" : adminKey;
-    }
-
-    /** Warn operators that the default local/demo configuration leaves profile writes open. */
-    @PostConstruct
-    void warnWhenAdminKeyIsUnset() {
-        if (adminKey.isBlank()) log.warn("PITCHR ADMIN KEY IS NOT CONFIGURED: profile write endpoints are open");
     }
 
     @GetMapping({"", "/"})
     public Map<String, Object> index() {
-    // Map.of() supports a maximum of 10 key-value pairs.
-    // Map.ofEntries() supports a larger number of entries.
-    return Map.of(
-        "name", "pitchr.",
-        "endpoints", Map.ofEntries(
-            Map.entry("profiles", "GET /api/profiles"),
-            Map.entry("createProfile", "POST /api/profiles"),
-            Map.entry("updateProfile", "PUT /api/profiles/{id}"),
-            Map.entry("deleteProfile", "DELETE /api/profiles/{id}"),
-            Map.entry("profileImages", "POST/DELETE /api/profiles/{id}/images"),
-            Map.entry("image", "GET /api/images/{imageId}"),
-            Map.entry("profile", "GET /api/profiles/{id}"),
-            Map.entry("session", "POST /api/session"),
-            Map.entry("matches", "GET /api/me/matches"),
-            Map.entry("swipe", "PUT /api/me/swipes/{profileId}"),
-            Map.entry("team", "GET /api/team")
-            )
-        );
+        return Map.of("name", "pitchr.", "endpoints", Map.of(
+            "profiles", "GET /api/profiles",
+            "profile", "GET /api/profiles/{id}",
+            "session", "POST /api/session",
+            "matches", "GET /api/me/matches",
+            "swipe", "PUT /api/me/swipes/{profileId}",
+            "team", "GET /api/team"));
     }
 
     /** Public profile list includes image metadata but never uploaded bytes. */
@@ -182,6 +165,53 @@ public class PortfolioController {
         return service.matches(token);
     }
 
+    @GetMapping("/me/conversations")
+    public List<PortfolioService.ConversationResponse> conversations(@CookieValue(name = COOKIE, required = false) String token) {
+        return service.conversations(token);
+    }
+
+    @GetMapping("/me/conversations/{profileId}/messages")
+    public List<MessageResponse> conversationMessages(@CookieValue(name = COOKIE, required = false) String token,
+            @PathVariable String profileId, @RequestParam(defaultValue = "0") long afterId) {
+        return service.conversationMessages(token, profileId, afterId);
+    }
+
+    @PostMapping(value = "/me/conversations/{profileId}/messages", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public MessageResponse sendVisitorMessage(@CookieValue(name = COOKIE, required = false) String token,
+            @PathVariable String profileId, @Valid @RequestBody MessageRequest request) {
+        return service.sendVisitorMessage(token, profileId, request.body());
+    }
+
+    @PostMapping("/me/conversations/{profileId}/read")
+    public ResponseEntity<Void> readConversation(@CookieValue(name = COOKIE, required = false) String token,
+            @PathVariable String profileId) {
+        service.markConversationRead(token, profileId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/team/conversations")
+    public List<PortfolioService.TeamConversationResponse> teamConversations(
+            @RequestHeader(name = "X-Team-Key", required = false) String key,
+            @RequestParam(required = false) String profileId) {
+        requireTeamKey(key);
+        return service.teamConversations(profileId);
+    }
+
+    @GetMapping("/team/conversations/{sessionId}/{profileId}/messages")
+    public List<MessageResponse> teamMessages(@RequestHeader(name = "X-Team-Key", required = false) String key,
+            @PathVariable String sessionId, @PathVariable String profileId) {
+        requireTeamKey(key);
+        return service.teamConversationMessages(sessionId, profileId);
+    }
+
+    @PostMapping(value = "/team/conversations/{sessionId}/{profileId}/messages", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public MessageResponse teamSend(@RequestHeader(name = "X-Team-Key", required = false) String key,
+            @PathVariable String sessionId, @PathVariable String profileId,
+            @Valid @RequestBody MessageRequest request) {
+        requireTeamKey(key);
+        return service.sendTeamMessage(sessionId, profileId, request.body());
+    }
+
     /** Store left/right/up swipe decisions as pass/like/super_like using the original endpoint. */
     @PutMapping(value = "/me/swipes/{profileId}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public PortfolioService.SwipeResult swipe(@CookieValue(name = COOKIE, required = false) String token,
@@ -204,10 +234,6 @@ public class PortfolioController {
     }
 
     public record SwipeRequest(@NotNull Swipe.Action action) {}
+    public record MessageRequest(@NotBlank @Size(min = 1, max = 1000) String body) {}
     public record SessionResponse(Instant expiresAt) {}
-    /** Image URLs are restricted to absolute http(s) URLs to block javascript/data payloads. */
-    public record ImageUrlRequest(@NotNull @NotEmpty @Size(max = 1000)
-        @Pattern(regexp = "https?://.+", message = "must be an http(s) URL") String url) {}
-    /** The reorder API accepts a full, nonempty replacement sequence rather than partial moves. */
-    public record ImageOrderRequest(@NotNull @NotEmpty List<Long> imageIds) {}
 }

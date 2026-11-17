@@ -11,12 +11,12 @@ import java.net.URI;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Transactional(readOnly = true)
@@ -26,18 +26,14 @@ public class PortfolioService {
     private final ProfileRepository profiles;
     private final SessionRepository sessions;
     private final SwipeRepository swipes;
-    private final ProfileImageRepository images;
-    private final ProfileImageBlobRepository imageBlobs;
     private final int sessionDays;
+    private final Map<String, Deque<Instant>> sendWindows = new ConcurrentHashMap<>();
 
     public PortfolioService(ProfileRepository profiles, SessionRepository sessions, SwipeRepository swipes,
-                            ProfileImageRepository images, ProfileImageBlobRepository imageBlobs,
                             @Value("${pitchr.session-days}") int sessionDays) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.swipes = swipes;
-        this.images = images;
-        this.imageBlobs = imageBlobs;
         this.sessionDays = sessionDays;
     }
 
@@ -196,102 +192,6 @@ public class PortfolioService {
         swipe.updatedAt = Instant.now();
         swipes.save(swipe);
         return new SwipeResult(profileId, action, action != Swipe.Action.pass, action == Swipe.Action.super_like);
-    }
-
-    /** Keep the legacy `image` property synchronized with the first gallery item or null. */
-    private void refreshCover(String profileId) {
-        Profile profile = requireProfile(profileId);
-        List<ProfileImage> ordered = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
-        if (ordered.isEmpty()) profile.image = null;
-        else profile.image = ordered.get(0).sourceUrl != null ? ordered.get(0).sourceUrl
-            : "/api/images/" + ordered.get(0).id;
-        profiles.save(profile);
-    }
-
-    /** Compact display_order after a gallery deletion to maintain stable contiguous ordering. */
-    private void normalizeImageOrder(String profileId) {
-        List<ProfileImage> ordered = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
-        for (int index = 0; index < ordered.size(); index++) ordered.get(index).displayOrder = index;
-        images.saveAll(ordered);
-    }
-
-    /** Central DTO mapper so every route returns gallery metadata in the same order. */
-    private ProfileResponse response(Profile profile, Boolean isSuper) {
-        return ProfileResponse.from(profile, isSuper,
-            images.findByProfileIdOrderByDisplayOrderAscIdAsc(profile.id));
-    }
-
-    /** Apply every editable request property and replace all three element collections. */
-    private void applyEditableFields(Profile profile, ProfileRequest request) {
-        profile.name = request.name().trim();
-        profile.persona = request.persona();
-        profile.age = request.age();
-        profile.location = request.location();
-        profile.role = request.role();
-        profile.verified = Boolean.TRUE.equals(request.verified());
-        profile.matchPercentage = request.matchPercentage() == null || request.matchPercentage().isBlank()
-            ? "New" : request.matchPercentage();
-        profile.bio = request.bio();
-        profile.tags.clear();
-        if (request.tags() != null) profile.tags.addAll(request.tags());
-        profile.dealbreakers.clear();
-        if (request.dealbreakers() != null) profile.dealbreakers.addAll(request.dealbreakers());
-        ProfileRequest.DetailsRequest details = request.details();
-        profile.fullBio = details == null ? null : details.fullBio();
-        profile.github = details == null ? null : details.github();
-        profile.linkedin = details == null ? null : details.linkedin();
-        profile.email = details == null ? null : details.email();
-        profile.projects.clear();
-        if (details != null && details.projects() != null) {
-            for (ProfileRequest.ProjectRequest project : details.projects()) {
-                Profile.Project entity = new Profile.Project();
-                entity.title = project.title();
-                entity.description = project.desc();
-                profile.projects.add(entity);
-            }
-        }
-    }
-
-    /** Generate a normalized lowercase-hyphen id and add numeric suffixes for collisions. */
-    private String uniqueSlug(String name) {
-        String normalized = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
-        String base = normalized.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-")
-            .replaceAll("^-|-$", "");
-        if (base.isBlank()) base = "profile";
-        String candidate = base;
-        int suffix = 2;
-        while (profiles.existsById(candidate)) candidate = base + "-" + suffix++;
-        return candidate;
-    }
-
-    /** Detect supported formats from file signatures, never trusting the browser-supplied MIME header. */
-    private String detectImageType(byte[] bytes) {
-        if (bytes.length >= 3 && (bytes[0] & 0xff) == 0xff && (bytes[1] & 0xff) == 0xd8
-            && (bytes[2] & 0xff) == 0xff) return "image/jpeg";
-        if (bytes.length >= 8 && (bytes[0] & 0xff) == 0x89 && bytes[1] == 'P' && bytes[2] == 'N'
-            && bytes[3] == 'G' && bytes[4] == 13 && bytes[5] == 10 && bytes[6] == 26 && bytes[7] == 10)
-            return "image/png";
-        if (bytes.length >= 6 && (new String(bytes, 0, 6, java.nio.charset.StandardCharsets.US_ASCII)
-            .equals("GIF87a") || new String(bytes, 0, 6, java.nio.charset.StandardCharsets.US_ASCII).equals("GIF89a")))
-            return "image/gif";
-        if (bytes.length >= 12 && new String(bytes, 0, 4, java.nio.charset.StandardCharsets.US_ASCII).equals("RIFF")
-            && new String(bytes, 8, 4, java.nio.charset.StandardCharsets.US_ASCII).equals("WEBP")) return "image/webp";
-        throw badRequest("Only valid JPEG, PNG, WebP, and GIF images are allowed");
-    }
-
-    /** Reject javascript:, data:, and other non-web schemes before a URL enters an href or image src. */
-    private void validateHttpUrl(String value, String field) {
-        try {
-            URI uri = URI.create(value);
-            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
-                || uri.getHost() == null) throw new IllegalArgumentException();
-        } catch (RuntimeException ex) {
-            throw badRequest(field + " must be a valid http(s) URL");
-        }
-    }
-
-    private ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
     private Profile requireProfile(String id) {

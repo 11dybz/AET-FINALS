@@ -72,13 +72,64 @@ ADMIN_KEY=replace-with-a-long-random-secret
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=supabase" "-Dspring-boot.run.arguments=--server.port=8081"
 ```
 
-Flyway creates/updates the dedicated `pitchr` schema. Keep it out of the Supabase Data API's exposed schemas; the frontend must use Spring Boot's `/api` routes. Supabase Auth is not used by this app. Do not commit `.env` or database credentials.
+For the packaged application:
 
-## Frontend behavior
+```powershell
+java -jar target/pitchr-backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=supabase --server.port=8081
+```
 
-The page uses this ordered startup sequence: `POST /api/session`, `GET /api/profiles`, then `GET /api/me/matches`. Swipe decisions map left/right/up to `pass`/`like`/`super_like`; the card moves only after the PUT succeeds. A 404 removes a profile deleted by another editor; other failures restore the card so the visitor can retry.
+The Supabase profile requires the three connection properties and never falls back to H2. It enables encrypted PostgreSQL connections (`sslmode=require`) and uses a five-connection application pool. For certificate verification, use `sslmode=verify-full` and the database CA certificate as described in [Supabase's connection documentation](https://supabase.com/docs/guides/database/connecting-to-postgres).
 
-When the API is unavailable, the original four profiles are used as a read-only fallback and an availability notice is shown. CRUD is disabled in that mode. In the connected mode, the swipe header, directory header, and empty-deck state expose **Add card**. Edit/Delete actions are available from the profile overlay and directory cards. The editor supports repeatable tags, highlights, projects, image uploads, URL-backed images, image deletion, and image reordering. Uploaded images are downscaled in the browser to a maximum 1,600-pixel dimension and JPEG quality around 0.85 when browser Canvas APIs are available.
+On the first successful connection, Flyway creates the **pitchr** schema and its tables and seeds the four members. Hibernate validates the schema; it does not automatically rewrite tables. Use a database role that can create and own this schema. Existing objects in `public`, `auth`, and `storage` are not used by this application. Keep `pitchr` out of the Supabase Data API's exposed schemas; the frontend should use Spring Boot's `/api` endpoints, which enforce visitor ownership. Supabase Auth is not part of this database connection; anonymous visitor cookies continue to work as before.
+
+Check the connection after startup:
+
+```powershell
+Invoke-RestMethod 'http://localhost:8081/api/profiles'
+```
+
+The Supabase project stores new profiles, sessions, and swipes independently of the local H2 database. Existing H2 visitor sessions/swipes are not transferred automatically. If Supabase is unreachable, check the exact pooler host/username, database password, network restrictions, and whether the project is paused.
+
+## Endpoints
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/profiles` | All four full profiles in display order; JSON array |
+| GET | `/api/profiles/{id}` | One full profile, or 404 |
+| POST | `/api/session` | Create/resume anonymous visitor; sets HttpOnly cookie; returns `expiresAt` |
+| PUT | `/api/me/swipes/{profileId}` | Save/update `{ "action": "pass" }`, `like`, or `super_like` |
+| GET | `/api/me/matches` | Full liked/super-liked profiles with `isSuper` |
+| GET | `/api/team` | Team `name` and `email` |
+
+Profile JSON retains the frontend's `tags`, `dealbreakers`, and `details` structure, including project `title` and `desc`. Profiles do not contain an `isSuper` property until returned as matches.
+
+Swipe response:
+
+```json
+{"profileId":"chee-reynaldo","action":"super_like","matched":true,"isSuper":true}
+```
+
+Matches are saved developers, without mutual approval. A session has one decision per profile: retrying a PUT is safe, `super_like` upgrades a like, and `pass` removes an existing match. Reloading the frontend deck should simply reuse the roster; it does not delete matches. The full roster is always returned, even for profiles previously passed or liked.
+
+Sessions expire after 30 days, with a fixed expiry. Expired/unknown cookies are replaced by POST `/api/session`. Protected endpoints return 401 for missing/invalid/expired sessions. Visitors are isolated by their opaque cookie; clearing cookies starts a fresh visitor. Expired rows are retained locally; add scheduled cleanup before long-running public deployment.
+
+Bad/missing actions return 400; unknown profiles return 404. Errors include `timestamp`, `status`, `message`, and `path`. API responses use `Cache-Control: no-store`.
+
+## Try it in PowerShell
+
+```powershell
+$base = 'http://localhost:8080/api'
+Invoke-RestMethod "$base/profiles"
+Invoke-RestMethod "$base/session" -Method Post -SessionVariable visitor
+Invoke-RestMethod "$base/me/swipes/chee-reynaldo" -Method Put `
+    -WebSession $visitor -ContentType 'application/json' `
+    -Body '{"action":"super_like"}'
+Invoke-RestMethod "$base/me/matches" -WebSession $visitor
+```
+
+## Frontend connection
+
+Spring Boot serves the homepage at `/`, all four member portfolio pages, and the frontend assets. The frontend uses `/api` on the same origin, so it follows the backend's current port automatically. Session initialization uses the shared request helper and shows a message if the backend is unavailable.
 
 The profile overlay displays every card, including newly created profiles. Gallery images use horizontal scroll snapping, dots/counter, arrow buttons, and a fullscreen lightbox with keyboard/touch navigation. The four manually maintained member pages remain as they were; their links are shown from the overlay rather than causing automatic redirects.
 
@@ -101,17 +152,18 @@ node --test FRONTEND/tests/app.test.cjs
 | `TEAM_EMAIL` | `team.leads@example.com` | Team contact email |
 | `ALLOWED_ORIGINS` | localhost ports 5500 | Comma-separated allowed frontend origins |
 | `COOKIE_SECURE` | `false` | Set `true` behind HTTPS |
-| `ADMIN_KEY` | blank | Optional key protecting profile/gallery writes |
-| `SUPABASE_DB_URL` | unset | Supabase JDBC URL when the `supabase` profile is active |
-| `SUPABASE_DB_USERNAME` | unset | Supabase database username |
-| `SUPABASE_DB_PASSWORD` | unset | Supabase database password |
+
+For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Profile editing/admin authentication and server-side mail delivery are outside the current frontend flow.
 
 ## Source layout
 
-- `Profile`, `Swipe`, `VisitorSession`, `ProfileImage`, and `ProfileImageBlob`: JPA entities.
-- `*Repository`: database access, including a separate blob repository so profile reads do not fetch image bytes.
-- `PortfolioService`: CRUD transactions, slug generation, visitor sessions/swipes, image validation, cover synchronization, and delete ordering.
-- `PortfolioController`: HTTP routes, session cookie, image streaming, and optional admin-key checks.
-- `ProfileRequest` / `ProfileResponse`: Bean Validation input and frontend-compatible output records.
-- `WebConfig`, `ApiExceptionHandler`: CORS, cache behavior, and structured JSON errors.
-- `src/main/resources/db/migration`: immutable, versioned schema changes. V3 adds the image gallery and updates seeded cover paths.
+- `Profile`, `VisitorSession`, `Swipe`: database entities.
+- `*Repository`: database access.
+- `PortfolioService`: transactions, session ownership, and swipe rules.
+- `PortfolioController`: HTTP endpoints and session cookie.
+- `ProfileResponse`: frontend-compatible response structure.
+- `WebConfig`, `ApiExceptionHandler`: allowed frontend origins and API errors.
+- `src/main/resources/db/migration`: versioned schema and seed data. Add a new migration to change an initialized database; do not edit an already-applied migration.
+- `PortfolioApiTests`: HTTP integration tests covering profile shape, visitor isolation, retry/concurrency handling, upgrades, passes, invalid input, expiry, and allowed origins.
+- `PostgresApiTests`: runs the same HTTP suite against a real temporary PostgreSQL server and checks schema isolation. Uses [embedded-postgres](https://github.com/zonkyio/embedded-postgres) test binaries; no Docker or Supabase credentials are required. Tests do not read `.env` or access your remote database.
+- `application-supabase.properties`, `.env.example`: Supabase connection profile and local configuration template.

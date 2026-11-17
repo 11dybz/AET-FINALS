@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SwipeRepository extends JpaRepository<Swipe, Long> {
+    @Override
+    @EntityGraph(attributePaths = {"profile", "session"})
+    List<Swipe> findAll();
     Optional<Swipe> findBySessionIdAndProfileId(String sessionId, String profileId);
     @EntityGraph(attributePaths = "profile")
     List<Swipe> findBySessionIdOrderByCreatedAtAscIdAsc(String sessionId);

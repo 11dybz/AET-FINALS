@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>pitchr. Team Inbox</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="font-sans bg-zinc-50 text-zinc-900 p-4">
+  <main class="max-w-3xl mx-auto space-y-4">
+    <h1 class="text-2xl font-black">Team Inbox</h1>
+    <label class="block text-sm font-bold">Team key
+      <input id="teamKey" type="password" class="mt-1 w-full min-h-11 border rounded-xl px-3" autocomplete="off">
+    </label>
+    <label class="block text-sm font-bold">Profile
+      <select id="teamProfile" class="mt-1 w-full min-h-11 border rounded-xl px-3">
+        <option value="chee-reynaldo">CHEE, Reynaldo Joseph</option>
+        <option value="dapog-john-greg">DAPOG, John Greg</option>
+        <option value="fontelar-dave">FONTELAR, Dave</option>
+        <option value="villanueva-justin">VILLANUEVA, Justin</option>
+      </select>
+    </label>
+    <button id="loadInbox" class="min-h-11 px-4 rounded-xl bg-zinc-900 text-white font-bold">Load conversations</button>
+    <div id="conversationList" class="grid gap-2"></div>
+    <section id="teamThread" class="hidden space-y-3">
+      <div id="teamMessages" class="min-h-64 max-h-96 overflow-y-auto border rounded-2xl p-3 bg-white"></div>
+      <textarea id="teamReply" maxlength="1000" class="w-full min-h-24 border rounded-xl p-3" aria-label="Reply"></textarea>
+      <button id="sendReply" class="min-h-11 px-4 rounded-xl bg-pink-600 text-white font-bold">Send reply</button>
+    </section>
+  </main>
+  <script>
+    let key = '', profileId = '', sessionId = '';
+    const $ = id => document.getElementById(id);
+    async function call(path, method='GET', body) {
+      const response = await fetch('/api' + path, {method, credentials:'include', headers:{'X-Team-Key':key, ...(body ? {'Content-Type':'application/json'} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
+      if (!response.ok) throw new Error(await response.text());
+      return response.status === 204 ? null : response.json();
+    }
+    $('loadInbox').onclick = async () => {
+      key = $('teamKey').value; profileId = $('teamProfile').value;
+      try {
+        const items = await call('/team/conversations?profileId=' + encodeURIComponent(profileId));
+        const list = $('conversationList'); list.replaceChildren();
+        items.forEach(item => {
+          const button = document.createElement('button');
+          button.className='min-h-11 p-3 rounded-xl border bg-white text-left';
+          button.textContent=item.profile.name + ' — ' + (item.lastMessage ? item.lastMessage.body : 'No messages');
+          button.onclick=()=>openThread(item.sessionId);
+          list.appendChild(button);
+        });
+      } catch (e) { alert(e.message); }
+    };
+    async function openThread(id) {
+      sessionId=id; $('teamThread').classList.remove('hidden');
+      await refresh();
+    }
+    async function refresh() {
+      const messages=await call('/team/conversations/' + encodeURIComponent(sessionId) + '/' + encodeURIComponent(profileId) + '/messages');
+      const log=$('teamMessages'); log.replaceChildren();
+      messages.forEach(message=>{
+        const p=document.createElement('p'); p.className='mb-2'; p.textContent=(message.sender+': '+message.body); log.appendChild(p);
+      });
+    }
+    $('sendReply').onclick=async()=>{
+      const body=$('teamReply').value.trim(); if(!body||!sessionId)return;
+      await call('/team/conversations/' + encodeURIComponent(sessionId) + '/' + encodeURIComponent(profileId) + '/messages','POST',{body});
+      $('teamReply').value=''; await refresh();
+    };
+  </script>
+</body>
+</html>
