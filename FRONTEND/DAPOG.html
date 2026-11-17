@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DAPOG, John Greg • LF</title>
+  <title>DAPOG, John Greg • RizzUme</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,11 +34,17 @@
     <a href="index.html" class="px-4 py-2 rounded-xl bg-white border border-pink-100 shadow-sm text-zinc-700 hover:text-tinder-pink font-bold text-xs flex items-center gap-1.5 transition-colors">
       <i data-lucide="arrow-left" class="w-4 h-4"></i><span>Back to team</span>
     </a>
-    <a href="index.html" class="flex items-center gap-2">
-      <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-tinder-pink to-tinder-orange flex items-center justify-center shadow-glow-pink">
-        <i data-lucide="flame" class="w-5 h-5 text-white fill-white"></i>
+    <a href="index.html" class="flex items-center gap-2 group">
+      <div class="w-9 h-9 rounded-2xl rotate-[-6deg] group-hover:rotate-0 transition-transform bg-zinc-950 p-0.5 shadow-glow-pink">
+        <div class="w-full h-full rounded-[13px] bg-gradient-to-br from-tinder-pink via-tinder-purple to-sky-500 flex items-center justify-center">
+          <span class="rotate-[6deg] group-hover:rotate-0 transition-transform font-black text-xs tracking-tighter text-white">
+            R<span class="text-cyan-200">U</span>
+          </span>
+        </div>
       </div>
-      <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-tinder-pink to-tinder-purple bg-clip-text text-transparent">LF</span>
+      <span class="font-black text-lg tracking-tight">
+        <span class="bg-gradient-to-r from-tinder-pink to-tinder-coral bg-clip-text text-transparent">Rizz</span><span class="bg-gradient-to-tr from-sky-500 via-tinder-super to-tinder-purple bg-clip-text text-transparent">U</span><span class="bg-gradient-to-r from-tinder-purple to-tinder-pink bg-clip-text text-transparent">me</span>
+      </span>
     </a>
   </header>
 
@@ -115,7 +121,7 @@
     <!-- Contact -->
     <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft space-y-4">
       <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Connect</h2>
-      <a href="mailto:dapog.johngreg@example.com?subject=Matched on Team Portfolio!" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white font-extrabold text-sm shadow-glow-pink hover:opacity-95 transition-all flex items-center justify-center gap-2">
+      <a href="mailto:dapog.johngreg@example.com?subject=Matched on RizzUme!" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white font-extrabold text-sm shadow-glow-pink hover:opacity-95 transition-all flex items-center justify-center gap-2">
         <i data-lucide="mail" class="w-4 h-4"></i><span>Get In Touch</span>
       </a>
       <div class="flex gap-4">
@@ -128,7 +134,9 @@
     <section class="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft flex flex-col items-center text-center space-y-3">
       <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Scan to Open Profile</h2>
       <div id="profileQrCode" class="p-3 bg-white rounded-2xl border border-pink-100 shadow-sm"></div>
-      <p class="text-[11px] text-zinc-500">Scan with your phone camera or the LF QR Scanner</p>
+      <p class="text-[11px] text-zinc-500">
+        Scan with your phone camera or the <span class="font-bold text-tinder-pink">Rizz</span><span class="font-black text-sky-500">U</span><span class="font-bold text-tinder-purple">me</span> QR Scanner
+      </p>
       <button onclick="downloadProfileQr()" class="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
         <i data-lucide="download" class="w-3.5 h-3.5"></i>
         <span>Save QR Image</span>
@@ -162,7 +170,7 @@
   <div class="fixed bottom-4 left-0 right-0 z-30 flex items-center justify-center gap-4 pointer-events-none">
     <a href="index.html" title="Back to team" class="pointer-events-auto w-12 h-12 rounded-full bg-white shadow-soft border border-red-50 flex items-center justify-center text-rose-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="x" class="w-6 h-6 stroke-[2.5]"></i></a>
     <button onclick="likeProfile()" title="Match" class="pointer-events-auto w-14 h-14 rounded-full bg-white shadow-soft border border-emerald-50 flex items-center justify-center text-emerald-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="heart" class="w-7 h-7 fill-emerald-500 stroke-none"></i></button>
-    <a href="mailto:dapog.johngreg@example.com?subject=Matched on Team Portfolio!" title="Email" class="pointer-events-auto w-12 h-12 rounded-full bg-white shadow-soft border border-purple-50 flex items-center justify-center text-purple-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="mail" class="w-5 h-5"></i></a>
+    <a href="mailto:dapog.johngreg@example.com?subject=Matched on RizzUme!" title="Email" class="pointer-events-auto w-12 h-12 rounded-full bg-white shadow-soft border border-purple-50 flex items-center justify-center text-purple-500 hover:scale-110 active:scale-90 transition-all"><i data-lucide="mail" class="w-5 h-5"></i></a>
   </div>
 
   <!-- Toast -->
@@ -196,7 +204,7 @@
     }
 
     function likeProfile() {
-      confetti({ particleCount: 90, spread: 80, origin: { y: 0.8 }, colors: ['#FE3C72', '#FD5564', '#FFD700', '#00D2FF', '#FFFFFF'] });
+      confetti({ particleCount: 90, spread: 80, origin: { y: 0.8 }, colors: ['#FE3C72', '#00D2FF', '#9B51E0', '#FFD700', '#FFFFFF'] });
       const t = document.getElementById('toast');
       t.classList.remove('translate-y-10', 'opacity-0');
       setTimeout(() => t.classList.add('translate-y-10', 'opacity-0'), 2200);
