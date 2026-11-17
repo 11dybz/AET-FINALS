@@ -24,34 +24,16 @@
   background: #e2e8f0;
   border-radius: 9999px;
 }
-/* Gallery slides scroll-snap horizontally. Each slide takes the natural height of its photo (nothing is
-   cropped); script.js sets the track height to the visible slide so the card resizes between photos. A blurred
-   copy of the photo fills any letterbox gap when a very tall image hits the max-height cap. */
-.gallery-track { display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 1rem; background: #18181b; transition: height .3s ease; }
-.gallery-track::-webkit-scrollbar { display: none; }
-.gallery-slide { position: relative; flex: 0 0 100%; scroll-snap-align: start; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #18181b; }
-.gallery-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(22px) brightness(.5); transform: scale(1.15); pointer-events: none; }
-.gallery-image { position: relative; display: block; width: 100%; height: auto; max-height: min(75vh, 44rem); object-fit: contain; cursor: zoom-in; }
-.gallery-image.image-loading { min-height: 12rem; }
-.gallery-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 2.25rem; height: 2.25rem; border-radius: 9999px; background: rgba(24,24,27,.7); color: white; font-size: 1.8rem; line-height: 1; z-index: 2; transition: background .15s ease, opacity .15s ease; }
-.gallery-arrow:hover:not(:disabled) { background: rgba(254,60,114,.9); }
-.gallery-arrow:disabled { opacity: .3; cursor: default; }
+/* Gallery slides use horizontal scroll snapping; controls are outside draggable deck cards. */
+/* Expanded gallery adapts to the image's aspect ratio. */
+.gallery-track {display: flex; align-items: center; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 1rem; background: #18181b; transition: height .22s ease;}
+.gallery-track::-webkit-scrollbar {display: none;}
+.gallery-slide {display: flex; flex: 0 0 100%; align-items: center; justify-content: center; scroll-snap-align: start; min-height: 10rem; height: 100%;}
+.gallery-image {display: block; width: 100%; height: auto; max-height: 68vh; object-fit: contain; object-position: center; cursor: zoom-in;}
+.gallery-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 2.25rem; height: 2.25rem; border-radius: 9999px; background: rgba(24,24,27,.7); color: white; font-size: 1.8rem; line-height: 1; z-index: 2; }
 .gallery-prev { left: .6rem; } .gallery-next { right: .6rem; }
-.gallery-expand { position: absolute; top: .6rem; right: .6rem; z-index: 2; width: 2rem; height: 2rem; border-radius: .6rem; background: rgba(24,24,27,.7); color: white; font-size: 1rem; line-height: 1; transition: background .15s ease; }
-.gallery-expand:hover { background: rgba(254,60,114,.9); }
-.gallery-arrow:focus-visible, .gallery-expand:focus-visible, .gallery-dot:focus-visible { outline: 2px solid #fe3c72; outline-offset: 2px; }
-.gallery-dot { width: .45rem; height: .45rem; border-radius: 50%; background: #d4d4d8; transition: width .2s ease, background .2s ease; }
+.gallery-dot { width: .45rem; height: .45rem; border-radius: 50%; background: #d4d4d8; }
 .gallery-dot.active { background: #fe3c72; width: 1.1rem; border-radius: 1rem; }
-
-/* Opening a card fades and lifts the profile into view instead of snapping on. */
-@keyframes profile-enter { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
-#fullProfileScreen.flex { animation: profile-enter .28s ease-out; }
-@keyframes lightbox-enter { from { opacity: 0; } to { opacity: 1; } }
-.profile-lightbox:not(.hidden) { animation: lightbox-enter .18s ease-out; }
-@media (prefers-reduced-motion: reduce) {
-  #fullProfileScreen.flex, .profile-lightbox:not(.hidden) { animation: none; }
-  .gallery-track { transition: none; }
-}
 
 /* The editor and confirmation overlays share a compact, responsive modal treatment. */
 .app-modal { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(9,9,11,.72); backdrop-filter: blur(5px); }

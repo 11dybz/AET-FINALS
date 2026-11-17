@@ -324,7 +324,7 @@ function renderDirectory() {
   grid.innerHTML = '';
   PROFILES.forEach(profile => {
     const card = document.createElement('div');
-    card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg hover:-translate-y-0.5 transition-all";
+    card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg transition-all";
     const image = safeImageUrl(profile.image || profile.images?.[0]?.url);
     card.innerHTML = `
       <div>
@@ -769,27 +769,17 @@ function renderProfileGallery(profile) {
     images.forEach((url, index) => {
       const slide = document.createElement('div');
       slide.className = 'gallery-slide';
-      // Blurred copy of the photo fills any gap around a very tall or narrow image.
-      const backdrop = document.createElement('img');
-      backdrop.className = 'gallery-backdrop';
-      backdrop.src = url;
-      backdrop.alt = '';
-      backdrop.setAttribute('aria-hidden', 'true');
-      backdrop.decoding = 'async';
       const image = document.createElement('img');
       image.src = url;
       image.alt = `${profile.name || 'Profile'} image ${index + 1}`;
-      image.loading = index === 0 ? 'eager' : 'lazy';
+      image.loading = 'lazy';
       image.className = 'gallery-image image-loading';
-      // Keep the slide's shimmer visible until the image loads or errors, then resize the card to fit it.
-      const imageSettled = () => {
-        image.classList.remove('image-loading');
-        if (index === currentGalleryIndex) fitGalleryHeight(index);
-      };
-      image.addEventListener('load', imageSettled, { once: true });
-      image.addEventListener('error', imageSettled, { once: true });
+      // Keep the slide's shimmer visible until the lazy-loaded image either loads or errors.
+      const clearImageSkeleton = () => image.classList.remove('image-loading');
+      image.addEventListener('load', clearImageSkeleton, { once: true });
+      image.addEventListener('error', clearImageSkeleton, { once: true });
       image.addEventListener('click', () => openLightbox(images, index));
-      slide.append(backdrop, image);
+      slide.appendChild(image);
       track.appendChild(slide);
     });
   }
@@ -804,13 +794,6 @@ function renderProfileGallery(profile) {
     next.className = 'gallery-arrow gallery-next';
     next.addEventListener('click', () => moveGallery(1));
     frame.append(previous, next);
-  }
-  if (images.length) {
-    const expand = document.createElement('button');
-    expand.type = 'button'; expand.textContent = '⤢'; expand.setAttribute('aria-label', 'View image full screen');
-    expand.className = 'gallery-expand';
-    expand.addEventListener('click', () => openLightbox(images, currentGalleryIndex));
-    frame.appendChild(expand);
   }
   gallery.appendChild(frame);
   const footer = document.createElement('div');
@@ -840,6 +823,33 @@ function renderProfileGallery(profile) {
   updateGalleryIndicators(0, images.length);
 }
 
+// Resize the gallery according to the currently selected image.
+function syncGalleryFrameHeight(index = currentGalleryIndex) {
+  const track = document.getElementById('profileGalleryTrack');
+  if (!track) return;
+
+  const image = track.children[index]?.querySelector('img');
+
+  // Wait until the browser has loaded the image dimensions.
+  if (!image || !image.naturalWidth || !image.naturalHeight) return;
+
+  const availableWidth = Math.max(track.clientWidth, 1);
+  const maxHeight = Math.max(
+    160,
+    window.innerHeight * (window.innerWidth <= 640 ? 0.58 : 0.68)
+  );
+
+  const naturalHeight =
+    availableWidth * (image.naturalHeight / image.naturalWidth);
+
+  const displayHeight = Math.max(
+    160,
+    Math.min(maxHeight, naturalHeight)
+  );
+
+  track.style.height = `${displayHeight}px`;
+}
+
 // Scroll to a selected gallery image and synchronize its current dot/counter state.
 function setGalleryIndex(index) {
   const track = document.getElementById('profileGalleryTrack');
@@ -857,20 +867,7 @@ function updateGalleryIndicators(index, count) {
   document.querySelectorAll('#profileGalleryDots .gallery-dot').forEach((dot, dotIndex) => {
     dot.classList.toggle('active', dotIndex === index);
   });
-  const previous = document.querySelector('#detailGallery .gallery-prev');
-  const next = document.querySelector('#detailGallery .gallery-next');
-  if (previous) previous.disabled = index <= 0;
-  if (next) next.disabled = index >= count - 1;
-  fitGalleryHeight(index);
 }
-
-// Resize the gallery to the visible photo so the card follows each image's own proportions.
-function fitGalleryHeight(index = currentGalleryIndex) {
-  const track = document.getElementById('profileGalleryTrack');
-  const slide = track && track.children[index];
-  if (slide && slide.offsetHeight) track.style.height = `${slide.offsetHeight}px`;
-}
-window.addEventListener('resize', () => fitGalleryHeight());
 
 // Create the fullscreen lightbox shell once, with keyboard, touch, backdrop, and focus handling.
 function openLightbox(images, index) {
@@ -907,11 +904,6 @@ function showLightboxImage() {
   image.onload = () => image.classList.remove('loading');
   image.src = images[lightboxIndex];
   document.getElementById('lightboxCounter').textContent = `${lightboxIndex + 1}/${images.length}`;
-  // Warm the cache for the neighbouring photos so arrow/swipe navigation feels instant.
-  [lightboxIndex - 1, lightboxIndex + 1].forEach(neighbour => {
-    const url = images[(neighbour + images.length) % images.length];
-    if (url && images.length > 1) new Image().src = url;
-  });
   modal.querySelector('[data-prev]').hidden = images.length <= 1;
   modal.querySelector('[data-next]').hidden = images.length <= 1;
 }
