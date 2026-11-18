@@ -35,10 +35,63 @@ function safeHref(value) {
   } catch (_) { return '#'; }
 }
 
-// Icons are decorative; a failed CDN request must not prevent browsing or API startup.
 if (!window.lucide) window.lucide = { createIcons() {} };
 
-// Central API transport: JSON bodies are encoded automatically, while FormData is left untouched for multipart uploads.
+function isGuestUser() {
+  return !window.RizzumeAccount?.user;
+}
+
+function handleGuardedClick(action, nextUrl = 'index.html') {
+  if (isGuestUser()) {
+    openSubscriptionHook(nextUrl);
+    return;
+  }
+  action();
+}
+
+function openSubscriptionHook(nextUrl = 'index.html') {
+  const modal = document.getElementById('subscriptionHookModal');
+  const box = document.getElementById('subscriptionHookBox');
+  const step1 = document.getElementById('paywallStepOne');
+  const step2 = document.getElementById('paywallStepTwo');
+  const loginLink = document.getElementById('prankLoginLink');
+  if (!modal || !box) return;
+
+  step1.classList.remove('hidden');
+  step2.classList.add('hidden');
+  if (loginLink) {
+    loginLink.href = window.RizzumeAccount?.signInUrl ? window.RizzumeAccount.signInUrl(nextUrl) : 'login.html';
+  }
+
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+  box.classList.remove('scale-90');
+  box.classList.add('scale-100');
+  lucide.createIcons();
+}
+
+function revealPaywallPrank(choice) {
+  const step1 = document.getElementById('paywallStepOne');
+  const step2 = document.getElementById('paywallStepTwo');
+  const badge = document.getElementById('prankReactionBadge');
+  if (!step1 || !step2) return;
+
+  if (badge) {
+    badge.textContent = choice === 'pay' ? 'Grabe galante! Pero joke lang!' : 'Smart choice! Joke lang po!';
+  }
+  step1.classList.add('hidden');
+  step2.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeSubscriptionHook() {
+  const modal = document.getElementById('subscriptionHookModal');
+  const box = document.getElementById('subscriptionHookBox');
+  if (!modal || !box) return;
+  modal.classList.add('opacity-0', 'pointer-events-none');
+  box.classList.remove('scale-100');
+  box.classList.add('scale-90');
+}
+
 async function apiCall(path, method = 'GET', data, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -71,32 +124,20 @@ async function apiCall(path, method = 'GET', data, options = {}) {
   }
 }
 
-async function fetchBackendProfiles() {
-  try {
-    const response = await fetch(`${API_BASE}/profiles`, { credentials: 'include' });
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.length > 0) {
-        // Map backend response fields to your UI cards if needed
-        console.log("Connected to backend profiles successfully!", data);
-      }
-    }
-  } catch (err) {
-    console.error("Failed to connect to backend:", err);
-  }
-}
-
 async function refreshProfilesAndMatches() {
-  const [profiles, matches] = await Promise.all([
-    apiCall('/profiles', 'GET', undefined, { admin: false }),
-    apiCall('/me/matches', 'GET', undefined, { admin: false })
-  ]);
+  const profiles = await apiCall('/profiles', 'GET', undefined, { admin: false });
   if (Array.isArray(profiles)) {
     PROFILES = profiles.map(profile => ({...profile,
       page: FALLBACK_PROFILES.find(member => member.id === profile.id)?.page}));
     cardsState = [...PROFILES];
+    swipeHistory = [];
   }
-  matchedProfiles = Array.isArray(matches) ? matches : [];
+  if (!isGuestUser()) {
+    const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
+    matchedProfiles = Array.isArray(matches) ? matches : [];
+  } else {
+    matchedProfiles = [];
+  }
   backendAvailable = true;
   showBackendNotice(false);
   updateDynamicCounts();
@@ -250,13 +291,13 @@ const FALLBACK_PROFILES = [
 ];
 
 // STATE VARIABLES
-// PROFILES is replaced by the API roster at startup; fallback data remains read-only when the API is unavailable.
 let PROFILES = FALLBACK_PROFILES;
 let cardsState = [...PROFILES];
+let swipeHistory = [];
 let matchedProfiles = [];
 let matchRemovalPending = false, matchRemovalTarget = null, matchRemovalDialog;
 let backendAvailable = false;
-let adminKey = ''; // In-memory only; never persisted to localStorage, cookies, or sessionStorage.
+let adminKey = '';
 let teamEmail = 'team.leads@example.com';
 let globalDragListenersRegistered = false;
 let currentGalleryIndex = 0;
@@ -293,7 +334,6 @@ function resolveProfileIdFromQr(rawText) {
   const cleaned = (rawText || '').trim();
   if (!cleaned) return null;
 
-  // Case 1: Full URL like https://site.com/?profile=fontelar-dave or /FONTELAR.html
   try {
     const url = new URL(cleaned, window.location.origin);
     const paramId = url.searchParams.get('profile');
@@ -301,11 +341,8 @@ function resolveProfileIdFromQr(rawText) {
 
     const matchedByPage = PROFILES.find(p => p.page && url.pathname.toLowerCase().endsWith(p.page.toLowerCase()));
     if (matchedByPage) return matchedByPage.id;
-  } catch (e) {
-    // Not a URL; fall through to raw ID check
-  }
+  } catch (e) {}
 
-  // Case 2: Raw profile ID string (e.g., "fontelar-dave")
   const matchedById = PROFILES.find(p => p.id.toLowerCase() === cleaned.toLowerCase());
   return matchedById ? matchedById.id : null;
 }
@@ -336,9 +373,34 @@ async function openQrScanner() {
       () => {}
     );
   } catch (err) {
-    console.error('Camera start failed:', err);
-    showToast('Camera Unavailable', 'Allow camera permissions or use HTTPS/localhost.');
-    closeQrScanner();
+    console.warn('Camera unavailable; image upload remains available:', err);
+    showToast('Camera Unavailable', 'Upload a QR or Digital ID image below instead.');
+  }
+}
+
+async function scanQrFromFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    if (typeof Html5Qrcode !== 'function') throw new Error('QR library unavailable');
+    if (html5QrScanner?.isScanning) {
+      await html5QrScanner.stop();
+    }
+    const fileScanner = new Html5Qrcode('qrReader');
+    const decodedText = await fileScanner.scanFile(file, true);
+    fileScanner.clear();
+    const profileId = resolveProfileIdFromQr(decodedText);
+    if (profileId) {
+      playBeep('super');
+      await closeQrScanner();
+      openProfileScreenById(profileId);
+    } else {
+      showToast('No Profile Found', 'That image did not contain a valid Rizzume QR.');
+    }
+  } catch (_) {
+    showToast('Could Not Read QR', 'Try a clearer screenshot of the QR code.');
+  } finally {
+    input.value = '';
   }
 }
 
@@ -360,7 +422,7 @@ async function closeQrScanner() {
 // ROUTING / MODE SELECTION
 function startMode(mode) {
   if (mode !== 'swipe' && mode !== 'directory') return;
-  window.RizzumeExperience?.navigated(mode);
+  if (!isGuestUser()) window.RizzumeExperience?.navigated(mode);
   try { sessionStorage.setItem('rizzumeMode', mode); } catch (e) {}
   document.getElementById('homeScreen').classList.add('hidden');
 
@@ -368,6 +430,7 @@ function startMode(mode) {
     document.getElementById('swipeAppScreen').classList.remove('hidden');
     document.getElementById('directoryScreen').classList.add('hidden');
     document.getElementById('directoryScreen').classList.remove('flex');
+    if (!cardsState.length && PROFILES.length) cardsState = [...PROFILES];
     renderDeck();
   } else if (mode === 'directory') {
     document.getElementById('directoryScreen').classList.remove('hidden');
@@ -385,38 +448,39 @@ function goToHome() {
   document.getElementById('directoryScreen').classList.add('hidden');
   document.getElementById('directoryScreen').classList.remove('flex');
   closeProfileScreen();
-  window.RizzumeExperience?.navigated('home');
+  if (!isGuestUser()) window.RizzumeExperience?.navigated('home');
   lucide.createIcons();
 }
 
-// RENDER DIRECT DIRECTORY VIEW (NO-SWIPING OPTION)
-// Render the directory from the active roster and attach actions without embedding profile data in HTML handlers.
+// RENDER DIRECT DIRECTORY VIEW (BLURRED FOR GUESTS)
 function renderDirectory() {
   const grid = document.getElementById('directoryGrid');
   grid.innerHTML = '';
+  const guest = isGuestUser();
   PROFILES.forEach(profile => {
     const card = document.createElement('div');
     card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg hover:-translate-y-0.5 transition-all";
     card.innerHTML = `
       <div>
         <div class="flex items-center gap-3.5 mb-4">
-          <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
+          <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 ${guest ? 'blur-[2px]' : ''}" />
           <div>
             <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${escapeHtml(profile.persona)}</span>
-            <h3 class="font-black text-sm text-zinc-900">${escapeHtml(profile.name)}</h3>
-            <p class="text-xs text-tinder-pink font-semibold">${escapeHtml(profile.role)}</p>
+            <h3 class="font-black text-sm text-zinc-900 ${guest ? 'blur-[4px] select-none' : ''}">${escapeHtml(profile.name)}</h3>
+            <p class="text-xs text-tinder-pink font-semibold ${guest ? 'blur-[4px] select-none' : ''}">${escapeHtml(profile.role)}</p>
           </div>
         </div>
-        <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed">${escapeHtml(profile.bio)}</p>
-        <div class="flex flex-wrap gap-1 mb-4">
+        <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed ${guest ? 'blur-[5px] select-none' : ''}">${escapeHtml(profile.bio)}</p>
+        <div class="flex flex-wrap gap-1 mb-4 ${guest ? 'blur-[4px] select-none' : ''}">
           ${(profile.tags || []).slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${escapeHtml(tag)}</span>`).join('')}
         </div>
       </div>
       <div class="grid grid-cols-1 ${canEditProfile(profile.id) ? 'sm:grid-cols-3' : ''} gap-2">
-        <button type="button" data-action="view" class="directory-view w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold">View Full Profile</button>
+        <button type="button" data-action="view" class="directory-view w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5">
+          ${guest ? '<i data-lucide="lock" class="w-3.5 h-3.5 text-tinder-pink"></i><span>Unlock Full Profile</span>' : '<span>View Full Profile</span>'}
+        </button>
         ${canEditProfile(profile.id) ? `<button type="button" data-action="edit" class="w-full py-2.5 rounded-xl bg-pink-50 text-tinder-pink text-xs font-bold">Edit my profile</button><button type="button" data-action="delete" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">Delete</button>` : ''}
       </div>`;
-    // Attach the selected profile through a closure, not an inline onclick attribute.
     card.querySelector('[data-action="view"]').addEventListener('click', () => openProfileScreen(profile));
     if (canEditProfile(profile.id)) {
       card.querySelector('[data-action="edit"]').addEventListener('click', () => openProfileEditor(profile));
@@ -444,7 +508,7 @@ function playBeep(type) {
     const gain = audioCtx.createGain();
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    
+
     const now = audioCtx.currentTime;
     if (type === 'like') {
       osc.frequency.setValueAtTime(440, now);
@@ -472,8 +536,7 @@ function playBeep(type) {
   } catch (e) {}
 }
 
-// RENDER PROFILE STACK
-// Build the swipe stack using escaped profile fields and the first gallery image as the cover.
+// RENDER PROFILE STACK (CONTINUOUS LOOP + BLURRED TEASER FOR GUESTS)
 function renderDeck() {
   const container = document.getElementById('cardsWrapper');
   const emptyDeck = document.getElementById('emptyDeck');
@@ -484,6 +547,8 @@ function renderDeck() {
     return;
   }
   emptyDeck.classList.add('hidden');
+  const guest = isGuestUser();
+
   for (let i = Math.min(cardsState.length, 3) - 1; i >= 0; i--) {
     const profile = cardsState[i];
     const isTopCard = i === 0;
@@ -497,34 +562,34 @@ function renderDeck() {
     card.setAttribute('data-id', profile.id);
     if (isTopCard) {
       card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
-      card.setAttribute('aria-label', 'View profile of ' + profile.name);
+      card.setAttribute('aria-label', 'Open full portfolio of ' + profile.name);
     } else card.setAttribute('aria-hidden', 'true');
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
-        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover spooderman-original" />
+        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover spooderman-original ${guest ? 'blur-[3px] scale-105' : ''}" />
         <img src="images/spooderman.webp" alt="" class="spooderman-hover absolute inset-0 w-full h-full object-contain opacity-0 transition-opacity duration-200 ease-out pointer-events-none" aria-hidden="true" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">HIRE / MATCH</div>
         <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity">PASS</div>
         <div class="stamp-super absolute bottom-14 left-1/2 -translate-x-1/2 border-4 border-sky-400 text-sky-400 font-black text-xl uppercase tracking-wider px-3 py-1 rounded-xl opacity-0 transition-opacity">SUPER LIKE ★</div>
-        <div class="absolute top-4 left-4 flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold">Open for Projects</span></div>
+        <div class="absolute top-4 left-4 flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold">${guest ? '🔒 Locked Profile' : 'Open for Projects'}</span></div>
         <div class="absolute bottom-3 left-4 right-4 text-white">
           <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
             ${escapeHtml(profile.persona)}
           </span>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 ${guest ? 'blur-[5px] select-none' : ''}">
             <h2 class="text-xl font-black">${escapeHtml(profile.name)}</h2>
             <span class="text-lg font-medium text-zinc-300">${escapeHtml(profile.age)}</span>
             ${profile.verified ? `<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>` : ''}
           </div>
-          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5">
+          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5 ${guest ? 'blur-[4px] select-none' : ''}">
             <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.location)}
           </p>
         </div>
       </div>
 
-      <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none">
-        <div class="flex items-center justify-between border-b border-zinc-100 pb-2">
+      <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none relative">
+        <div class="flex items-center justify-between border-b border-zinc-100 pb-2 ${guest ? 'blur-[4px] select-none' : ''}">
           <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
             <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.role)}
           </span>
@@ -533,19 +598,19 @@ function renderDeck() {
           </span>
         </div>
 
-        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${escapeHtml(profile.bio)}</p>
+        <p class="text-xs text-zinc-600 leading-relaxed font-normal ${guest ? 'blur-[5px] select-none' : ''}">${escapeHtml(profile.bio)}</p>
 
-        <div class="flex flex-wrap gap-1.5 pt-1">
+        <div class="flex flex-wrap gap-1.5 pt-1 ${guest ? 'blur-[4px] select-none' : ''}">
           ${(profile.tags || []).map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${escapeHtml(t)}</span>`).join('')}
         </div>
 
-        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1">
+        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1 ${guest ? 'blur-[5px] select-none' : ''}">
           <span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Match:</span>
           ${(profile.dealbreakers || []).map(d => `<p class="text-[11px] text-zinc-700 font-medium">${escapeHtml(d)}</p>`).join('')}
         </div>
 
         <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
-          Click card to open full profile &rarr;
+          ${guest ? '🔒 Tap card to unlock full profile &rarr;' : 'Click card to open full portfolio &rarr;'}
         </div>
       </div>
     `;
@@ -556,9 +621,8 @@ function renderDeck() {
   attachTopCardListeners();
 }
 
-// Attach window-level pointer listeners once; each render only binds handlers to the current top card.
 function attachTopCardListeners() {
-  const topCard = document.querySelector('.swipe-card:last-child');
+  const topCard = document.querySelector('#cardsWrapper .swipe-card:last-child');
   if (!globalDragListenersRegistered) {
     window.addEventListener('mousemove', onDragMove);
     window.addEventListener('mouseup', onDragEnd);
@@ -577,7 +641,6 @@ function attachTopCardListeners() {
       if (profile) openProfileScreen(profile);
     }
   });
-  // A click opens details only when the pointer gesture did not cross a drag threshold.
   topCard.addEventListener('click', event => {
     if (hasSwipedOrMoved || isSwiping) {
       event.preventDefault();
@@ -665,42 +728,61 @@ function onDragEnd() {
 }
 
 function triggerSwipeAction(direction) {
-  if (cardsState.length === 0 || !activeCardElem) return;
+  if (!cardsState.length && PROFILES.length) {
+    cardsState = [...PROFILES];
+    renderDeck();
+  }
+  const topCard = document.querySelector('#cardsWrapper .swipe-card:last-child');
+  if (!topCard || cardsState.length === 0) return;
+  activeCardElem = topCard;
   finalizeSwipe(direction);
 }
 
 async function finalizeSwipe(direction) {
-  if (!backendAvailable) return showToast('Read-only mode', 'Connect to the backend and reload before saving a swipe.');
-  if (!activeCardElem || cardsState.length === 0 || isSwiping || matchRemovalPending) return;
+  if (cardsState.length === 0 || isSwiping || matchRemovalPending) return;
+  const card = activeCardElem || document.querySelector('#cardsWrapper .swipe-card:last-child');
+  if (!card) return;
+
+  if (isGuestUser()) {
+    card.classList.add('card-transition');
+    card.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
+    card.querySelectorAll('.stamp-like, .stamp-nope, .stamp-super').forEach(s => s.style.opacity = 0);
+    const targetPage = cardsState[0]?.page || 'index.html';
+    openSubscriptionHook(targetPage);
+    return;
+  }
+
   isSwiping = true;
   hasSwipedOrMoved = true;
   isDragging = false;
-  const card = activeCardElem;
   const swipedProfile = cardsState[0];
   const action = direction === 'left' ? 'pass' : direction === 'up' ? 'super_like' : 'like';
   card.classList.add('card-transition');
-  try {
-    await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
-  } catch (error) {
-    // A 404 means another editor deleted this profile; dropping it avoids a permanently stuck deck.
-    if (error.status === 404) {
-      cardsState = cardsState.filter(profile => profile.id !== swipedProfile.id);
-      PROFILES = PROFILES.filter(profile => profile.id !== swipedProfile.id);
-      showToast('Profile removed', 'This card was deleted by another editor.');
+
+  if (backendAvailable) {
+    try {
+      await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
+    } catch (error) {
+      if (error.status === 404) {
+        cardsState = cardsState.filter(profile => profile.id !== swipedProfile.id);
+        PROFILES = PROFILES.filter(profile => profile.id !== swipedProfile.id);
+        showToast('Profile removed', 'This card was deleted by another editor.');
+        isSwiping = false;
+        hasSwipedOrMoved = false;
+        try { await refreshProfilesAndMatches(); renderDirectory(); } catch (_) {}
+        renderDeck();
+        return;
+      }
+      card.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
+      card.style.opacity = '1';
       isSwiping = false;
       hasSwipedOrMoved = false;
-      try { await refreshProfilesAndMatches(); renderDirectory(); } catch (refreshError) {}
-      renderDeck();
+      showToast('Swipe not saved', `${error.message}. Try again.`);
       return;
     }
-    // Restore the card so the visitor can retry after a transient network or server failure.
-    card.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
-    card.style.opacity = '1';
-    isSwiping = false;
-    hasSwipedOrMoved = false;
-    showToast('Swipe not saved', `${error.message}. Try again.`);
-    return;
   }
+
+  swipeHistory.push({ profile: swipedProfile, direction });
 
   if (direction === 'right') {
     playBeep('like');
@@ -713,24 +795,41 @@ async function finalizeSwipe(direction) {
     playBeep('pass');
     card.style.transform = 'translate3d(-600px, 50px, 0px) rotate(-25deg)';
     card.style.opacity = '0';
-    showToast('Passed', 'Swipe saved');
+    showToast('Passed', `${swipedProfile.name} moved to back of deck`);
   } else {
     playBeep('super');
     card.style.transform = 'translate3d(0px, -700px, 0px) rotate(0deg)';
     card.style.opacity = '0';
     handleMatchSuccess(swipedProfile, true);
   }
-  // Keep the card locked during its exit transition, then remove exactly the acknowledged profile.
+
   setTimeout(() => {
-    cardsState = cardsState.filter(profile => profile.id !== swipedProfile.id);
+    cardsState = [...cardsState.filter(profile => profile.id !== swipedProfile.id), swipedProfile];
     isSwiping = false;
-    // Reset the gesture guard after the old card is gone so the next card can open on an ordinary click.
     hasSwipedOrMoved = false;
     renderDeck();
   }, 300);
 }
 
-// Update local match feedback only after a successful server write; text fields use textContent.
+async function rewindLastSwipe() {
+  if (isSwiping || matchRemovalPending) return;
+  if (!swipeHistory.length) {
+    return showToast('Nothing to Rewind', 'Swipe a card first to bring it back.');
+  }
+  const last = swipeHistory.pop();
+  cardsState = [last.profile, ...cardsState.filter(p => p.id !== last.profile.id)];
+  if (last.direction !== 'left') {
+    matchedProfiles = matchedProfiles.filter(p => p.id !== last.profile.id);
+    if (typeof syncRemovedMatch === 'function') syncRemovedMatch(last.profile.id);
+    updateMatchesUI();
+    if (backendAvailable) {
+      apiCall(`/me/swipes/${encodeURIComponent(last.profile.id)}`, 'PUT', { action: 'pass' }, { admin: false }).catch(() => {});
+    }
+  }
+  renderDeck();
+  showToast('Rewound!', `${last.profile.name} is back on top.`);
+}
+
 function handleMatchSuccess(profile, isSuper) {
   currentlyViewingProfile = profile;
   const existing = matchedProfiles.find(item => item.id === profile.id);
@@ -772,11 +871,79 @@ function openDetailFromMatch() {
   }
 }
 
-// FULL PROFILE SCREEN OVERLAY
-// Open every card in the in-page overlay; original team portfolios are linked, never auto-redirected.
+function openChatFromMatch() {
+  const target = currentlyViewingProfile;
+  closeMatchModal();
+  if (target) openChat(target.id);
+}
+
+async function messageCurrentProfile() {
+  if (!currentlyViewingProfile) return;
+  const profile = currentlyViewingProfile;
+  if (!backendAvailable) {
+    return copyCurrentProfileEmail();
+  }
+  if (!matchedProfiles.some(p => p.id === profile.id)) {
+    try {
+      await apiCall(`/me/swipes/${encodeURIComponent(profile.id)}`, 'PUT', { action: 'like' }, { admin: false });
+      matchedProfiles.push({ ...profile, isSuper: false });
+      updateMatchesUI();
+    } catch (error) {
+      return showToast('Could not connect', error.message);
+    }
+  }
+  closeProfileScreen();
+  await openChat(profile.id);
+}
+
+async function copyCurrentProfileEmail() {
+  const email = currentlyViewingProfile?.details?.email;
+  if (!email) return showToast('No Email Listed', 'This developer has not listed a public email.');
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(email);
+    showToast('Email Copied!', email);
+  } catch (_) {
+    showToast('Contact Email', email);
+  }
+}
+
+async function pingMatchedProfile(profile) {
+  if (!profile) return;
+  if (!backendAvailable) {
+    const email = profile.details?.email;
+    if (email && navigator.clipboard?.writeText) await navigator.clipboard.writeText(email).catch(() => {});
+    return showToast('Pinged (Offline)', email ? `Copied ${email}` : profile.name);
+  }
+  try {
+    await apiCall(`/me/conversations/${encodeURIComponent(profile.id)}/messages`, 'POST', {
+      body: `👋 Hey ${profile.name.split(',')[0]}! Just pinged you from Rizzume — let's connect!`
+    }, { admin: false });
+    playBeep('like');
+    showToast('Ping Sent! ⚡', `Opening chat with ${profile.name}`);
+    toggleMatchesDrawer(false);
+    await openChat(profile.id);
+  } catch (error) {
+    toggleMatchesDrawer(false);
+    await openChat(profile.id);
+  }
+}
+
+// REDIRECT DIRECTLY TO MAIN FULL PORTFOLIO PAGE (OR TRIGGER PRANK PAYWALL FOR GUESTS)
 function openProfileScreen(profile) {
   if (!profile) return;
   currentlyViewingProfile = profile;
+  const targetPage = profile.page || FALLBACK_PROFILES.find(m => m.id === profile.id)?.page;
+
+  if (isGuestUser()) {
+    openSubscriptionHook(targetPage || 'index.html');
+    return;
+  }
+
+  if (targetPage) {
+    window.location.href = targetPage;
+    return;
+  }
+
   const hero = document.getElementById('detailHeroImage');
   hero.src = safeImageUrl(profile.images?.[0]?.url || profile.image);
   hero.alt = profile.name || 'Profile';
@@ -785,10 +952,18 @@ function openProfileScreen(profile) {
   document.getElementById('detailHeroRole').textContent = profile.role || '';
   document.getElementById('detailPersonaBadge').textContent = profile.persona || '';
   document.getElementById('detailFullBio').textContent = profile.details?.fullBio || profile.bio || '';
-  document.getElementById('detailGithubLink').href = safeHref(profile.details?.github);
-  document.getElementById('detailLinkedinLink').href = safeHref(profile.details?.linkedin);
 
-  // Build project nodes with textContent so profile-controlled strings never become markup.
+  const ghLink = document.getElementById('detailGithubLink');
+  const liLink = document.getElementById('detailLinkedinLink');
+  const copyEmailBtn = document.getElementById('detailCopyEmailBtn');
+  const ghUrl = safeHref(profile.details?.github);
+  const liUrl = safeHref(profile.details?.linkedin);
+  ghLink.href = ghUrl;
+  ghLink.hidden = ghUrl === '#';
+  liLink.href = liUrl;
+  liLink.hidden = liUrl === '#';
+  if (copyEmailBtn) copyEmailBtn.hidden = !profile.details?.email;
+
   const projectContainer = document.getElementById('detailProjectItems');
   projectContainer.replaceChildren();
   (profile.details?.projects || []).forEach(project => {
@@ -809,17 +984,9 @@ function openProfileScreen(profile) {
     skills.appendChild(pill);
   });
 
-  // Add a scroll-snap gallery to the existing overlay without changing the four member pages.
   renderProfileGallery(profile);
   const actions = ensureProfileActions();
   actions.replaceChildren();
-  if (profile.page) {
-    const pageLink = document.createElement('a');
-    pageLink.href = safeHref(new URL(profile.page, window.location.origin + '/').toString());
-    pageLink.textContent = 'Open full portfolio page';
-    pageLink.className = 'text-xs font-bold text-tinder-pink hover:underline';
-    actions.appendChild(pageLink);
-  }
   if (canEditProfile(profile.id)) {
     const edit = document.createElement('button');
     edit.type = 'button'; edit.textContent = 'Edit';
@@ -838,7 +1005,6 @@ function openProfileScreen(profile) {
   lucide.createIcons();
 }
 
-// Ensure the existing overlay has a dedicated gallery area and profile-management action row.
 function ensureProfileActions() {
   const screen = document.getElementById('fullProfileScreen');
   let actions = document.getElementById('detailManagementActions');
@@ -852,7 +1018,6 @@ function ensureProfileActions() {
   return actions;
 }
 
-// Render gallery slides, position dots, a counter, and controls only when more than one image exists.
 function renderProfileGallery(profile) {
   const screen = document.getElementById('fullProfileScreen');
   let gallery = document.getElementById('detailGallery');
@@ -881,7 +1046,6 @@ function renderProfileGallery(profile) {
     images.forEach((url, index) => {
       const slide = document.createElement('div');
       slide.className = 'gallery-slide';
-      // Blurred copy of the photo fills any gap around a very tall or narrow image.
       const backdrop = document.createElement('img');
       backdrop.className = 'gallery-backdrop';
       backdrop.src = url;
@@ -893,7 +1057,6 @@ function renderProfileGallery(profile) {
       image.alt = `${profile.name || 'Profile'} image ${index + 1}`;
       image.loading = index === 0 ? 'eager' : 'lazy';
       image.className = 'gallery-image image-loading';
-      // Keep the slide's shimmer visible until the image loads or errors, then resize the card to fit it.
       const imageSettled = () => {
         image.classList.remove('image-loading');
         if (index === currentGalleryIndex) fitGalleryHeight(index);
@@ -952,7 +1115,6 @@ function renderProfileGallery(profile) {
   updateGalleryIndicators(0, images.length);
 }
 
-// Scroll to a selected gallery image and synchronize its current dot/counter state.
 function setGalleryIndex(index) {
   const track = document.getElementById('profileGalleryTrack');
   const images = JSON.parse(document.getElementById('detailGallery')?.dataset.images || '[]');
@@ -976,7 +1138,6 @@ function updateGalleryIndicators(index, count) {
   fitGalleryHeight(index);
 }
 
-// Resize the gallery to the visible photo so the card follows each image's own proportions.
 function fitGalleryHeight(index = currentGalleryIndex) {
   const track = document.getElementById('profileGalleryTrack');
   const slide = track && track.children[index];
@@ -984,7 +1145,6 @@ function fitGalleryHeight(index = currentGalleryIndex) {
 }
 window.addEventListener('resize', () => fitGalleryHeight());
 
-// Create the fullscreen lightbox shell once, with keyboard, touch, backdrop, and focus handling.
 function openLightbox(images, index) {
   let modal = document.getElementById('profileLightbox');
   if (!modal) {
@@ -1019,7 +1179,6 @@ function showLightboxImage() {
   image.onload = () => image.classList.remove('loading');
   image.src = images[lightboxIndex];
   document.getElementById('lightboxCounter').textContent = `${lightboxIndex + 1}/${images.length}`;
-  // Warm the cache for the neighbouring photos so arrow/swipe navigation feels instant.
   [lightboxIndex - 1, lightboxIndex + 1].forEach(neighbour => {
     const url = images[(neighbour + images.length) % images.length];
     if (url && images.length > 1) new Image().src = url;
@@ -1042,12 +1201,14 @@ function closeProfileScreen() {
 }
 
 function openTopMemberDetail() {
+  if (!cardsState.length && PROFILES.length) {
+    cardsState = [...PROFILES];
+    renderDeck();
+  }
   if (cardsState.length > 0) {
     openProfileScreen(cardsState[0]);
   }
 }
-
-// Messaging workspace behavior lives in messages.js.
 
 // MATCHES DRAWER
 function toggleMatchesDrawer(show) {
@@ -1063,7 +1224,6 @@ function toggleMatchesDrawer(show) {
   }
 }
 
-// Persist removal before changing any local matches or conversations.
 async function removeSavedMatch(profileId) {
   if (matchRemovalPending) return false;
   if (!backendAvailable) throw new Error('Connect to Rizzume and try again.');
@@ -1120,7 +1280,6 @@ function askToRemoveMatch(profileId) {
   matchRemovalDialog.open();
 }
 
-// Render saved matches with separate, keyboard-accessible view, contact and remove actions.
 function updateMatchesUI() {
   window.RizzumeExperience?.refresh();
   const count = matchedProfiles.length;
@@ -1140,7 +1299,7 @@ function updateMatchesUI() {
           ${item.isSuper ? '<span class="rz-match-super">Super liked</span>' : ''}</span>
         </button>
         <div class="rz-match-actions">
-          <button type="button" data-contact class="rz-match-contact"><i data-lucide="mail" aria-hidden="true"></i>Ping</button>
+          <button type="button" data-contact class="rz-match-contact" title="Send instant ping & open chat"><i data-lucide="zap" aria-hidden="true"></i>Ping</button>
           <button type="button" data-remove class="rz-match-remove" aria-label="Remove ${escapeHtml(item.name)} from matches"><i data-lucide="heart-off" aria-hidden="true"></i>Remove</button>
         </div>
       `;
@@ -1148,7 +1307,7 @@ function updateMatchesUI() {
         toggleMatchesDrawer(false); openProfileScreen(item);
       });
       row.querySelector('[data-contact]').addEventListener('click', event => {
-        event.stopPropagation(); directContactProfile(item.details?.email || '');
+        event.stopPropagation(); pingMatchedProfile(item);
       });
       row.querySelector('[data-remove]').addEventListener('click', () => askToRemoveMatch(item.id));
       list.appendChild(row);
@@ -1156,22 +1315,6 @@ function updateMatchesUI() {
   }
 
   lucide.createIcons();
-}
-
-async function resetDeck() {
-  if (isSwiping) return;
-  try {
-    await refreshProfilesAndMatches();
-    renderDeck();
-    showToast('Deck Reloaded', 'Latest profiles loaded');
-  } catch (error) {
-    backendAvailable = false;
-    showBackendNotice(true);
-    updateDynamicCounts();
-    cardsState = [...PROFILES];
-    renderDeck();
-    showToast('Backend unavailable', 'Showing the read-only fallback roster');
-  }
 }
 
 function showToast(title, subtitle) {
@@ -1197,90 +1340,81 @@ function toggleInfoModal() {
   }
 }
 
-function directContactProfile(email) {
-  window.location.href = safeHref(`mailto:${encodeURIComponent(email)}?subject=Matched%20on%20Rizzume!`);
-}
-
-function directContactCurrentProfile() {
-  if (currentlyViewingProfile) {
-    directContactProfile(currentlyViewingProfile.details.email);
+async function copyTeamContact() {
+  const email = teamEmail;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(email);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = email;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    showToast("Copied to Clipboard!", email);
+  } catch (_) {
+    showToast("Team Email", email);
   }
 }
 
-function copyTeamContact() {
-  const email = teamEmail;
-  const textarea = document.createElement('textarea');
-  textarea.value = email;
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
-
-  showToast("Copied to Clipboard!", email);
-}
-
-// Authenticate first, then load independent workspace data concurrently.
+// Check login optionally: guests land on the clean Welcome page and see blurred teaser cards when exploring
 window.addEventListener('DOMContentLoaded', async () => {
   document.body?.classList.add('workspace-loading');
-  if (window.RizzumeAccount && !await window.RizzumeAccount.requireLogin()) return;
-  PROFILES = []; cardsState = []; // Show a stable loading skeleton before the real roster arrives.
+  const loggedIn = window.RizzumeAccount ? await window.RizzumeAccount.checkOptional() : false;
+  PROFILES = []; cardsState = [];
   lucide.createIcons();
   updateDynamicCounts();
   showBackendNotice(false);
-  // Render immediately while the session loads, keeping the discovery screen stable on refresh.
-  let initialMode = 'swipe';
-  try { if (sessionStorage.getItem('rizzumeMode') === 'directory') initialMode = 'directory'; } catch (_) {}
-  startMode(initialMode);
 
   try {
-    if (!window.RizzumeAccount?.user) await apiCall('/session', 'POST', undefined, { admin: false });
     await Promise.all([
       refreshProfilesAndMatches(),
       apiCall('/team', 'GET', undefined, { admin: false }).then(team => {
         if (team?.email) teamEmail = team.email;
-      }).catch(error => console.error('Could not load team contact:', error))
+      }).catch(() => {})
     ]);
   } catch (error) {
-    console.error('Backend initialization failed:', error);
     PROFILES = FALLBACK_PROFILES;
     cardsState = [...FALLBACK_PROFILES];
     matchedProfiles = [];
     backendAvailable = false;
-    showBackendNotice(true);
+    if (loggedIn) {
+      showBackendNotice(true);
+      showToast('Backend unavailable', 'Showing a read-only fallback roster.');
+    }
     updateDynamicCounts();
-    showToast('Backend unavailable', 'Showing a read-only fallback roster.');
     updateMatchesUI();
   }
 
-  // Check if opened via QR link (e.g., ?profile=fontelar-dave)
   renderDirectory();
   renderDeck();
   document.body?.classList.remove('workspace-loading');
-  window.RizzumeExperience?.ready();
-  const urlParams = typeof URLSearchParams === 'undefined'
-    ? { get: () => null }
-    : new URLSearchParams((window.location && window.location.search) || '');
-  const qrProfileId = urlParams.get('profile');
-  if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
-    openProfileScreenById(qrProfileId);
-    return;
-  }
 
-  const chatId = urlParams.get('chat');
-  if (chatId && backendAvailable && PROFILES.some(profile => profile.id === chatId)) {
-    await openChat(chatId);
-    return;
-  }
+  if (loggedIn) {
+    window.RizzumeExperience?.ready();
+    const urlParams = new URLSearchParams(window.location.search || '');
+    const qrProfileId = urlParams.get('profile');
+    if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
+      openProfileScreenById(qrProfileId);
+      return;
+    }
 
-  // Restore the selected browsing mode
-  let mode = null;
-  try {
-    mode = sessionStorage.getItem('rizzumeMode');
-  } catch (e) {}
+    const chatId = urlParams.get('chat');
+    if (chatId && backendAvailable && PROFILES.some(profile => profile.id === chatId)) {
+      await openChat(chatId);
+      return;
+    }
 
-  if (mode === 'swipe' || mode === 'directory') {
-    startMode(mode);
+    let mode = null;
+    try { mode = sessionStorage.getItem('rizzumeMode'); } catch (e) {}
+    if (mode === 'swipe' || mode === 'directory') startMode(mode);
+    else startMode('swipe');
   } else {
-    startMode('swipe');
+    // Guests start on the clean Welcome screen; clicking Discover or Skip Swiping reveals the blurred teaser cards
+    goToHome();
   }
 });

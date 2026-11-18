@@ -7,13 +7,14 @@
   let notifyBrowser = false, filter = 'all', location = null;
   try { notifyBrowser = localStorage.getItem('rzBrowserNotifications') === 'true'; } catch (_) {}
 
+  const qrSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2"/></svg>`;
+
   const shell = document.createElement('div');
   shell.innerHTML = `
     <aside class="rz-sidebar" aria-label="Main navigation">
       <div class="rz-sidebar-head"><a class="rz-logo" href="index.html" aria-label="Rizzume home">${icon('flame')}rizzume<small>PORTFOLIO</small></a><p>A little spark. Your next big project.</p></div>
       <div class="rz-sidebar-scroll"><nav class="rz-nav">
         <button data-nav="swipe" aria-current="page">${icon('discover')}Discover</button>
-        <button data-nav="my-profile">${icon('grid')}My profile</button>
         <button data-nav="directory">${icon('grid')}Explore the team</button>
         <button data-nav="matches">${icon('heart')}Your matches<span id="sidebarMatchCount" class="rz-pill">0</span></button>
         <button data-nav="messages">${icon('message')}Messages<span id="sidebarMessageCount" class="rz-pill" hidden>0</span></button>
@@ -26,7 +27,7 @@
       <div class="rz-sidebar-footer"><div id="sidebarAccount" class="rz-account-summary"></div><button id="sidebarLogout" type="button" class="rz-account-logout">Log out</button><a href="team-inbox.html">${icon('lock')}Team workspace ${icon('arrow')}</a><p>Find your people. Build something great.<br>Rizzume · Team portfolio</p></div>
     </aside>
     <header class="rz-topbar"><div class="rz-breadcrumb">Your workspace <span>/</span> <strong id="rzBreadcrumb">Discover</strong></div>
-      <div class="rz-top-actions"><button id="topLocation" class="rz-location-button">${icon('pin')}<span id="topLocationLabel">Explore locations</span></button><button id="topNotifications" class="rz-icon-button" aria-label="Open notifications">${icon('bell')}<span id="topNotificationBadge" class="rz-badge" hidden></span></button><button id="topHelp" class="rz-icon-button" aria-label="How Rizzume works">${icon('spark')}</button><button id="accountMenuButton" class="rz-avatar" type="button" aria-label="Your account">You</button></div>
+      <div class="rz-top-actions"><button id="topLocation" class="rz-location-button">${icon('pin')}<span id="topLocationLabel">Explore locations</span></button><button id="topNotifications" class="rz-icon-button" aria-label="Open notifications">${icon('bell')}<span id="topNotificationBadge" class="rz-badge" hidden></span></button><button id="topQr" class="rz-icon-button" aria-label="Scan QR Code" title="Scan Member QR Code">${qrSvg}</button><button id="topHelp" class="rz-icon-button" aria-label="How Rizzume works">${icon('spark')}</button><button id="accountMenuButton" class="rz-avatar" type="button" aria-label="Your account">You</button></div>
     </header>
     <div class="rz-heading" id="discoveryHeading"><div><div class="rz-eyebrow">Great people. Greater possibilities.</div><h2>Find your next connection<span style="color:#fe3c72">.</span></h2><p>Meet the minds behind the code. See who clicks.</p></div><button id="discoveryFilters" class="rz-outline-button">${icon('settings')}Preferences</button></div>
     <aside id="discoveryTip" class="rz-tip"><div class="rz-tip-art">${icon('spark')}</div><h3>Great things start<br>with a right swipe.</h3><p>Find a skill that clicks.<br>Save a profile. Say hello.<br>Build something together.</p><hr><div class="rz-status">Open for collaboration</div><small>Profiles are saved to your matches.<br>A saved profile isn’t a mutual match.</small></aside>
@@ -34,20 +35,75 @@
   document.body.classList.add('rizzume-app');
   while (shell.firstChild) document.body.insertBefore(shell.firstChild, $('homeScreen'));
   document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.nav)));
-  $('topLocation').onclick = () => openMap(); $('topNotifications').onclick = () => openNotifications();
+  $('topLocation').onclick = () => openMap();
+  $('topNotifications').onclick = () => openNotifications();
+  $('topQr').onclick = () => openQrScanner();
   $('topHelp').onclick = () => toggleInfoModal();
-  const accountMenu = dialog('accountMenu', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><h2>Your account</h2><p id="accountEmail"></p></div><button data-close class="rz-icon-button" aria-label="Close account menu">${icon('close')}</button></div><p id="accountName" style="font-weight:800"></p><p class="rz-help">Your matches and conversations are saved to this account.</p><div class="rz-dialog-actions"><button id="accountProfile" type="button" class="rz-outline-button">My profile</button><button id="accountResume" type="button" class="rz-outline-button" title="Export your saved profile">Download resume PDF</button><button id="accountLogout" type="button" class="rz-primary">Log out</button></div></section>`);
+
+  const accountMenu = dialog('accountMenu', `<section class="rz-dialog-panel">
+    <div class="rz-dialog-header"><div><h2>Your account</h2><p id="accountEmail"></p></div><button data-close class="rz-icon-button" aria-label="Close account menu">${icon('close')}</button></div>
+    <p id="accountName" style="font-weight:800"></p>
+    <div id="accountSetupPrompt" class="rounded-2xl p-3.5 bg-pink-50 border border-pink-200 text-xs text-zinc-700 space-y-2 my-2" hidden>
+      <p class="font-extrabold text-tinder-pink">Your developer card isn't set up yet!</p>
+      <p class="leading-relaxed">Click the <strong>+</strong> button in the lower-right corner of the Discover screen (or tap below) to customize your profile and join the deck.</p>
+    </div>
+    <p id="accountStandardHelp" class="rz-help">Your profile, matches, and conversations are saved to this account.</p>
+    <div class="rz-dialog-actions">
+      <button id="accountProfile" type="button" class="rz-primary">Customize my profile</button>
+      <button id="accountResume" type="button" class="rz-outline-button" title="Export your saved profile">Download resume PDF</button>
+    </div>
+  </section>`);
+
+  function syncFloatingProfileButton() {
+    const wrap = $('floatingProfileWrap');
+    const hint = $('floatingProfileHint');
+    if (!wrap) return;
+    const user = window.RizzumeAccount?.user;
+    if (!user || mode !== 'swipe') {
+      wrap.classList.add('hidden');
+      return;
+    }
+    wrap.classList.remove('hidden');
+    const hasProfile = Boolean(user.profileId);
+    if (hint) {
+      hint.textContent = hasProfile ? 'Edit my card' : 'Customize profile';
+      hint.classList.toggle('animate-bounce', !hasProfile);
+    }
+  }
+
   function refreshAccount() {
     const user = window.RizzumeAccount?.user; if (!user) return;
-    $('accountName').textContent = user.name; $('accountEmail').textContent = user.email;
-    $('accountResume').disabled = !user.profileId;
+    const hasProfile = Boolean(user.profileId);
+    $('accountName').textContent = user.name;
+    $('accountEmail').textContent = user.email;
+    $('accountResume').disabled = !hasProfile;
+    $('accountResume').hidden = !hasProfile;
+    $('accountSetupPrompt').hidden = hasProfile;
+    $('accountStandardHelp').hidden = !hasProfile;
+    $('accountProfile').textContent = hasProfile ? 'Edit my profile' : 'Create my profile';
     $('accountMenuButton').textContent = user.name.trim().split(/\s+/).slice(0,2).map(part => Array.from(part)[0]).join('').toUpperCase();
-    $('accountMenuButton').title = user.name;
+    $('accountMenuButton').title = hasProfile ? `${user.name} • Edit Profile` : `${user.name} • Profile not set up yet`;
     $('sidebarAccount').replaceChildren();
     const name = document.createElement('strong'); name.textContent = user.name;
     const email = document.createElement('span'); email.textContent = user.email; $('sidebarAccount').append(name,email);
+    syncFloatingProfileButton();
   }
-  $('accountMenuButton').onclick = () => { refreshAccount(); accountMenu.open(); };
+
+  $('accountMenuButton').onclick = () => {
+    refreshAccount();
+    const user = window.RizzumeAccount?.user;
+    if (user && !user.profileId) {
+      startMode('swipe');
+      const fab = $('floatingProfileBtn');
+      if (fab) {
+        fab.classList.add('ring-4', 'ring-tinder-pink/40', 'scale-110');
+        setTimeout(() => fab.classList.remove('ring-4', 'ring-tinder-pink/40', 'scale-110'), 1800);
+      }
+      toast('Input your details first! Tap the + button in the lower right to customize your profile.');
+    }
+    accountMenu.open();
+  };
+
   async function openOwnProfile() {
     accountMenu.close();
     if (!backendAvailable) return toast('Connect to Rizzume before managing your profile.');
@@ -61,6 +117,8 @@
     } catch (error) { toast(error.message); }
   }
   $('accountProfile').onclick = openOwnProfile;
+  if ($('floatingProfileBtn')) $('floatingProfileBtn').onclick = openOwnProfile;
+
   $('accountResume').onclick = async () => {
     try { if (await window.RizzumeResume.download($('accountResume'))) toast('Your resume PDF has been downloaded.'); }
     catch (error) { toast(error.message); }
@@ -84,7 +142,7 @@
     loggingOut = true;
     $('logoutError').hidden = true;
     logoutConfirmation.el.setAttribute('aria-busy', 'true');
-    const buttons = [...logoutConfirmation.el.querySelectorAll('button'), $('sidebarLogout'), $('accountLogout')];
+    const buttons = [...logoutConfirmation.el.querySelectorAll('button'), $('sidebarLogout')].filter(Boolean);
     buttons.forEach(button => { button.disabled = true; });
     $('confirmLogout').textContent = 'Logging out…';
     try { await window.RizzumeAccount.logout(); }
@@ -99,7 +157,7 @@
       $('confirmLogout').textContent = 'Log out';
     }
   };
-  $('sidebarLogout').onclick = askToLogout; $('accountLogout').onclick = askToLogout;
+  $('sidebarLogout').onclick = askToLogout;
 
   const notices = dialog('notificationCenter', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><div class="rz-eyebrow">Stay in the loop</div><h2>Your notifications</h2><p>Matches, replies, and video call updates.</p></div><button data-close class="rz-icon-button" aria-label="Close notifications">${icon('close')}</button></div>
     <div class="rz-notice-toolbar"><label for="noticeFilter">Show<select id="noticeFilter"><option value="all">All activity</option><option value="match">Matches</option><option value="message">Messages</option><option value="call">Video calls</option></select></label><button id="readNotices" type="button" class="rz-outline-button">Mark all read</button></div>
@@ -261,7 +319,7 @@
     cardsState = PROFILES.filter(p => [p.name,p.role,p.location,...(p.tags || [])].some(value => String(value || '').toLowerCase().includes(query)));
     renderDeck();
     if (!cardsState.length) $('emptyDeckTitle').textContent = 'No profiles match your preferences.';
-    else $('emptyDeckTitle').textContent = 'You’ve explored this deck.';
+    else $('emptyDeckTitle').textContent = 'No profiles match your filter';
     preferences.close(); startMode('swipe');
     toast(query ? `${cardsState.length} profile${cardsState.length === 1 ? '' : 's'} match your preferences.` : 'Showing the full team.');
   }
@@ -287,7 +345,6 @@
   }
   function navigate(target) {
     if (chatOpen && target !== 'messages') closeChat();
-    if (target === 'my-profile') openOwnProfile();
     if (target === 'swipe' || target === 'directory') startMode(target);
     if (target === 'matches') toggleMatchesDrawer(true);
     if (target === 'messages') openChat();
@@ -298,11 +355,12 @@
     refreshAccount,
     stop() { clearTimeout(pollTimer); room.hangup(); },
     resume() { if (backendAvailable && !polling) poll(); },
-    ready() { if (ready) return; ready = true; refreshSidebar(); if (backendAvailable) poll(); },
+    ready() { if (ready) return; ready = true; refreshSidebar(); syncFloatingProfileButton(); if (backendAvailable) poll(); },
     navigated(value) {
       mode = value; $('rzBreadcrumb').textContent = ({directory:'Explore the team',home:'Welcome',messages:'Messages'})[value] || 'Discover';
       $('discoveryHeading').hidden = value !== 'swipe'; $('discoveryTip').hidden = value !== 'swipe';
       document.querySelectorAll('[data-nav]').forEach(button => { if (button.dataset.nav === mode) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
+      syncFloatingProfileButton();
     },
     refresh: refreshSidebar, openMap
   };

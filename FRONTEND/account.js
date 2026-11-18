@@ -27,17 +27,35 @@
       return (url.pathname === '/' ? '/index.html' : url.pathname) + url.search + url.hash;
     } catch (_) { return 'index.html'; }
   }
-  function signInUrl() { return 'login.html?next=' + encodeURIComponent(destination(window.location.href)); }
+  function signInUrl(nextOverride) {
+    const target = nextOverride ? destination(nextOverride) : destination(window.location.href);
+    return 'login.html?next=' + encodeURIComponent(target);
+  }
   function expired() {
     if (redirecting) return;
     redirecting = true; user = null; window.RizzumeExperience?.stop(); window.location.replace(signInUrl());
+  }
+  async function checkOptional() {
+    try {
+      const account = await request('/me');
+      if (account?.authenticated && account.user) {
+        user = account.user;
+        document.body.classList.remove('auth-pending', 'guest-preview');
+        window.RizzumeExperience?.refreshAccount();
+        return true;
+      }
+    } catch (_) {}
+    user = null;
+    document.body.classList.remove('auth-pending');
+    document.body.classList.add('guest-preview');
+    return false;
   }
   async function requireLogin() {
     const gate = document.getElementById('accountGate');
     try {
       const account = await request('/me');
       if (!account?.authenticated) { expired(); return false; }
-      user = account.user; document.body.classList.remove('auth-pending'); if (gate) gate.hidden = true;
+      user = account.user; document.body.classList.remove('auth-pending', 'guest-preview'); if (gate) gate.hidden = true;
       window.RizzumeExperience?.refreshAccount(); return true;
     } catch (error) {
       if (gate) {
@@ -59,7 +77,7 @@
     if (!account?.authenticated) { expired(); throw new Error('Your session has expired. Please log in again.'); }
     user = account.user; window.RizzumeExperience?.refreshAccount(); return user;
   }
-  window.RizzumeAccount = {request, destination, requireLogin, expired, logout, refresh, get user() {return user;}};
+  window.RizzumeAccount = {request, destination, signInUrl, checkOptional, requireLogin, expired, logout, refresh, get user() {return user;}};
   if (document.body.dataset.accountRequired === 'true') {
     const gate = document.createElement('section'); gate.id = 'accountGate'; gate.className = 'account-check';
     gate.setAttribute('role', 'status');
