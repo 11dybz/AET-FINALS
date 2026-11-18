@@ -1,6 +1,35 @@
 // Use the page's server, including its current port. A separate frontend server
-// can set window.PITCHR_API_BASE before loading this script.
-const API_BASE = (window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
+// can set window.RIZZUME_API_BASE before loading this script.
+const API_BASE = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
+
+function safeImageUrl(value) {
+  if (!value || typeof value !== 'string') return '';
+  try {
+    const base = window.location?.href || 'http://localhost/';
+    const url = new URL(value, base);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    if (value.startsWith('/api/images/')) return API_BASE + value.slice(4);
+    if (value.startsWith('/images/')) return new URL(value, new URL(API_BASE, base)).href;
+    return url.href;
+  } catch (_) { return ''; }
+}
+
+function safeHref(value) {
+  if (!value || typeof value !== 'string') return '#';
+  try {
+    const url = new URL(value, window.location?.href || 'http://localhost/');
+    return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.href : '#';
+  } catch (_) { return '#'; }
+}
+
+// Icons are decorative; a failed CDN request must not prevent browsing or API startup.
+if (!window.lucide) window.lucide = { createIcons() {} };
 
 // Central API transport: JSON bodies are encoded automatically, while FormData is left untouched for multipart uploads.
 async function apiCall(path, method = 'GET', data, options = {}) {
@@ -26,7 +55,9 @@ async function apiCall(path, method = 'GET', data, options = {}) {
       throw error;
     }
     if (response.status === 204) return null;
-    return await response.json();
+    if (response.headers?.get('content-length') === '0') return null;
+    const body = await response.text();
+    return body ? JSON.parse(body) : null;
   } finally {
     clearTimeout(timeout);
   }
@@ -50,12 +81,14 @@ async function fetchBackendProfiles() {
 async function refreshProfilesAndMatches() {
   const profiles = await apiCall('/profiles', 'GET', undefined, { admin: false });
   if (Array.isArray(profiles)) {
-    PROFILES = profiles;
-    cardsState = [...profiles];
+    PROFILES = profiles.map(profile => ({...profile,
+      page: FALLBACK_PROFILES.find(member => member.id === profile.id)?.page}));
+    cardsState = [...PROFILES];
   }
   const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
   matchedProfiles = Array.isArray(matches) ? matches : [];
   backendAvailable = true;
+  showBackendNotice(false);
   updateDynamicCounts();
   updateMatchesUI();
   return { profiles: PROFILES, matches: matchedProfiles };
@@ -64,6 +97,10 @@ async function refreshProfilesAndMatches() {
 function updateDynamicCounts() {
   const matchBadge = document.getElementById('matchBadge');
   if (matchBadge) matchBadge.textContent = String(matchedProfiles.length);
+  ['teamCountHome', 'teamCountButton', 'teamCountFooter', 'directoryCount'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = String(PROFILES.length);
+  });
+  document.querySelectorAll('[data-requires-backend]').forEach(button => { button.disabled = !backendAvailable; });
 }
 
 function showBackendNotice(readOnly) {
@@ -228,6 +265,9 @@ let chatAfterId = 0;
 let chatPollTimer = null;
 let chatLastFocused = null;
 let chatFailedPayload = null;
+let chatGeneration = 0;
+let chatSending = false;
+const chatPolls = new Set();
 
 // ==================== QR CODE SCANNER & DEEP LINKING ====================
 function resolveProfileIdFromQr(rawText) {
@@ -240,7 +280,7 @@ function resolveProfileIdFromQr(rawText) {
     const paramId = url.searchParams.get('profile');
     if (paramId && PROFILES.some(p => p.id === paramId)) return paramId;
 
-    const matchedByPage = PROFILES.find(p => url.pathname.toLowerCase().endsWith(p.page.toLowerCase()));
+    const matchedByPage = PROFILES.find(p => p.page && url.pathname.toLowerCase().endsWith(p.page.toLowerCase()));
     if (matchedByPage) return matchedByPage.id;
   } catch (e) {
     // Not a URL; fall through to raw ID check
@@ -258,8 +298,9 @@ async function openQrScanner() {
 
   if (html5QrScanner) return;
 
-  html5QrScanner = new Html5Qrcode('qrReader');
   try {
+    if (typeof Html5Qrcode !== 'function') throw new Error('Scanner unavailable');
+    html5QrScanner = new Html5Qrcode('qrReader');
     await html5QrScanner.start(
       { facingMode: 'environment' },
       { fps: 10, qrbox: { width: 230, height: 230 } },
@@ -299,12 +340,14 @@ async function closeQrScanner() {
 
 // ROUTING / MODE SELECTION
 function startMode(mode) {
-  try { sessionStorage.setItem('pitchrMode', mode); } catch (e) {}
+  if (mode !== 'swipe' && mode !== 'directory') return;
+  try { sessionStorage.setItem('rizzumeMode', mode); } catch (e) {}
   document.getElementById('homeScreen').classList.add('hidden');
 
   if (mode === 'swipe') {
     document.getElementById('swipeAppScreen').classList.remove('hidden');
     document.getElementById('directoryScreen').classList.add('hidden');
+    document.getElementById('directoryScreen').classList.remove('flex');
     renderDeck();
   } else if (mode === 'directory') {
     document.getElementById('directoryScreen').classList.remove('hidden');
@@ -316,7 +359,7 @@ function startMode(mode) {
 }
 
 function goToHome() {
-  try { sessionStorage.removeItem('pitchrMode'); } catch (e) {}
+  try { sessionStorage.removeItem('rizzumeMode'); } catch (e) {}
   document.getElementById('homeScreen').classList.remove('hidden');
   document.getElementById('swipeAppScreen').classList.add('hidden');
   document.getElementById('directoryScreen').classList.add('hidden');
@@ -333,11 +376,10 @@ function renderDirectory() {
   PROFILES.forEach(profile => {
     const card = document.createElement('div');
     card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg hover:-translate-y-0.5 transition-all";
-    const image = safeImageUrl(profile.image || profile.images?.[0]?.url);
     card.innerHTML = `
       <div>
         <div class="flex items-center gap-3.5 mb-4">
-          <img src="${profile.image}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
+          <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100" />
           <div>
             <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${escapeHtml(profile.persona)}</span>
             <h3 class="font-black text-sm text-zinc-900">${escapeHtml(profile.name)}</h3>
@@ -346,7 +388,7 @@ function renderDirectory() {
         </div>
         <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed">${escapeHtml(profile.bio)}</p>
         <div class="flex flex-wrap gap-1 mb-4">
-          ${profile.tags.slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${tag}</span>`).join('')}
+          ${(profile.tags || []).slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${escapeHtml(tag)}</span>`).join('')}
         </div>
       </div>
       <div class="grid grid-cols-1 ${backendAvailable ? 'sm:grid-cols-3' : ''} gap-2">
@@ -370,10 +412,13 @@ function openProfileScreenById(id) {
 }
 
 // SOUND SYNTHESIS
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioCtx = null;
 function playBeep(type) {
-  if (!audioCtx) return;
   try {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) return;
+    audioCtx ||= new Audio();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
@@ -425,15 +470,13 @@ function renderDeck() {
     const scale = 1 - (i * 0.04);
     const translateY = i * 10;
     const zIndex = 30 - i;
-    const cover = safeImageUrl(profile.images?.[0]?.url || profile.image);
-    const imageCount = Array.isArray(profile.images) ? profile.images.length : (profile.image ? 1 : 0);
     card.className = `swipe-card absolute inset-0 w-full h-full rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden flex flex-col justify-between select-none ${isTopCard ? 'cursor-grab active:cursor-grabbing card-transition' : ''}`;
     card.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
     card.style.zIndex = zIndex;
     card.setAttribute('data-id', profile.id);
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
-        <img src="${profile.image}" alt="${profile.name}" class="w-full h-full object-cover" />
+        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">HIRE / MATCH</div>
         <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity">PASS</div>
@@ -441,15 +484,15 @@ function renderDeck() {
         <div class="absolute top-4 left-4 flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold">Open for Projects</span></div>
         <div class="absolute bottom-3 left-4 right-4 text-white">
           <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
-            ${profile.persona}
+            ${escapeHtml(profile.persona)}
           </span>
           <div class="flex items-center gap-2">
-            <h2 class="text-xl font-black">${profile.name}</h2>
-            <span class="text-lg font-medium text-zinc-300">${profile.age}</span>
+            <h2 class="text-xl font-black">${escapeHtml(profile.name)}</h2>
+            <span class="text-lg font-medium text-zinc-300">${escapeHtml(profile.age)}</span>
             ${profile.verified ? `<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>` : ''}
           </div>
           <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5">
-            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.location}
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.location)}
           </p>
         </div>
       </div>
@@ -457,22 +500,22 @@ function renderDeck() {
       <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none">
         <div class="flex items-center justify-between border-b border-zinc-100 pb-2">
           <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
-            <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${profile.role}
+            <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.role)}
           </span>
           <span class="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-            ${profile.matchPercentage}
+            ${escapeHtml(profile.matchPercentage)}
           </span>
         </div>
 
-        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${profile.bio}</p>
+        <p class="text-xs text-zinc-600 leading-relaxed font-normal">${escapeHtml(profile.bio)}</p>
 
         <div class="flex flex-wrap gap-1.5 pt-1">
-          ${profile.tags.map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${t}</span>`).join('')}
+          ${(profile.tags || []).map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${escapeHtml(t)}</span>`).join('')}
         </div>
 
         <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1">
           <span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Match:</span>
-          ${profile.dealbreakers.map(d => `<p class="text-[11px] text-zinc-700 font-medium">${d}</p>`).join('')}
+          ${(profile.dealbreakers || []).map(d => `<p class="text-[11px] text-zinc-700 font-medium">${escapeHtml(d)}</p>`).join('')}
         </div>
 
         <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
@@ -594,6 +637,7 @@ function triggerSwipeAction(direction) {
 }
 
 async function finalizeSwipe(direction) {
+  if (!backendAvailable) return showToast('Read-only mode', 'Connect to the backend and reload before saving a swipe.');
   if (!activeCardElem || cardsState.length === 0 || isSwiping) return;
   isSwiping = true;
   hasSwipedOrMoved = true;
@@ -631,6 +675,8 @@ async function finalizeSwipe(direction) {
     card.style.opacity = '0';
     handleMatchSuccess(swipedProfile, false);
   } else if (direction === 'left') {
+    matchedProfiles = matchedProfiles.filter(profile => profile.id !== swipedProfile.id);
+    updateMatchesUI();
     playBeep('pass');
     card.style.transform = 'translate3d(-600px, 50px, 0px) rotate(-25deg)';
     card.style.opacity = '0';
@@ -656,7 +702,7 @@ function handleMatchSuccess(profile, isSuper) {
   currentlyViewingProfile = profile;
   const existing = matchedProfiles.find(item => item.id === profile.id);
   if (!existing) matchedProfiles.push({ ...profile, isSuper });
-  else existing.isSuper = Boolean(existing.isSuper || isSuper);
+  else existing.isSuper = Boolean(isSuper);
   updateMatchesUI();
   if (typeof confetti === 'function') confetti({
     particleCount: isSuper ? 120 : 70, spread: 80, origin: { y: 0.6 },
@@ -667,10 +713,10 @@ function handleMatchSuccess(profile, isSuper) {
   const subtitle = document.getElementById('matchModalSubtitle');
   const avatar = document.getElementById('matchModalAvatar');
 
-  avatar.src = profile.image;
+  avatar.src = safeImageUrl(profile.image);
   subtitle.innerHTML = isSuper 
-    ? `🔥 <strong>SUPER LIKE!</strong> Priority match unlocked with <strong>${profile.name}</strong>!`
-    : `You and <strong>${profile.name}</strong> matched! Review projects or connect directly.`;
+    ? `🔥 <strong>SUPER LIKE!</strong> Priority match unlocked with <strong>${escapeHtml(profile.name)}</strong>!`
+    : `You and <strong>${escapeHtml(profile.name)}</strong> matched! Review projects or connect directly.`;
 
   modal.classList.remove('opacity-0', 'pointer-events-none');
   box.classList.remove('scale-90');
@@ -716,8 +762,8 @@ function openProfileScreen(profile) {
     const item = document.createElement('div');
     item.className = "p-3 bg-zinc-50 border border-zinc-100 rounded-xl";
     item.innerHTML = `
-      <h4 class="text-xs font-bold text-zinc-900">${proj.title}</h4>
-      <p class="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">${proj.desc}</p>
+      <h4 class="text-xs font-bold text-zinc-900">${escapeHtml(project.title)}</h4>
+      <p class="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">${escapeHtml(project.desc)}</p>
     `;
     projectContainer.appendChild(item);
   });
@@ -969,14 +1015,24 @@ function openTopMemberDetail() {
 }
 
 async function openChat(profileId) {
+  if (!backendAvailable) return showToast('Messages unavailable', 'Connect to the backend and reload.');
+  if (profileId && !matchedProfiles.some(profile => profile.id === profileId)) {
+    return showToast('Match first', 'Like this profile before sending a message.');
+  }
   chatLastFocused = document.activeElement;
   chatOpen = true;
   chatProfileId = profileId || null;
+  chatGeneration++;
+  document.getElementById('threadView').classList.add('hidden');
+  document.getElementById('threadView').classList.remove('flex');
+  document.getElementById('conversationList').classList.remove('hidden');
+  document.getElementById('chatTitle').textContent = 'Messages';
   const sheet = document.getElementById('chatSheet');
   sheet.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
   sheet.classList.add('flex');
   lucide.createIcons();
   await loadConversations();
+  if (!chatOpen) return;
   if (chatProfileId) await openChatThread(chatProfileId);
   startChatPolling();
   const composer = document.getElementById('chatComposer');
@@ -985,6 +1041,7 @@ async function openChat(profileId) {
 }
 
 function closeChat() {
+  chatGeneration++;
   chatOpen = false;
   chatProfileId = null;
   stopChatPolling();
@@ -1003,6 +1060,7 @@ async function loadConversations() {
   if (!chatOpen) return;
   try {
     const conversations = await apiCall('/me/conversations');
+    if (!chatOpen) return;
     const list = document.getElementById('conversationList');
     list.replaceChildren();
     let unreadTotal = 0;
@@ -1014,7 +1072,7 @@ async function loadConversations() {
       row.className = 'w-full min-h-11 flex items-center gap-3 p-3 rounded-2xl border border-zinc-100 bg-zinc-50 text-left focus:outline-none focus:ring-2 focus:ring-tinder-pink';
       row.addEventListener('click', () => openChatThread(profile.id));
       const img = document.createElement('img');
-      img.src = profile.image || '';
+      img.src = safeImageUrl(profile.image);
       img.alt = '';
       img.className = 'w-12 h-12 rounded-xl object-cover';
       const copy = document.createElement('div');
@@ -1044,9 +1102,12 @@ async function loadConversations() {
 }
 
 async function openChatThread(profileId) {
+  chatGeneration++;
   chatProfileId = profileId;
   chatAfterId = 0;
   chatFailedPayload = null;
+  document.getElementById('chatComposer').value = '';
+  document.getElementById('chatError').classList.add('hidden');
   const profile = matchedProfiles.find(p => p.id === profileId) || PROFILES.find(p => p.id === profileId);
   chatProfileName = profile ? profile.name : profileId;
   document.getElementById('chatTitle').textContent = chatProfileName;
@@ -1056,6 +1117,7 @@ async function openChatThread(profileId) {
   thread.classList.remove('hidden');
   thread.classList.add('flex');
   document.getElementById('messageLog').replaceChildren();
+  document.getElementById('messageLog').dataset.lastDay = '';
   await pollChatMessages(true);
   try { await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`, 'POST'); } catch (e) {}
   await loadConversations();
@@ -1063,13 +1125,18 @@ async function openChatThread(profileId) {
 
 async function pollChatMessages(initial = false) {
   if (!chatOpen || !chatProfileId || document.hidden) return;
+  const profileId = chatProfileId, generation = chatGeneration;
+  if (chatPolls.has(generation)) return;
+  chatPolls.add(generation);
   try {
     const log = document.getElementById('messageLog');
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-    const messages = await apiCall(`/me/conversations/${encodeURIComponent(chatProfileId)}/messages?afterId=${chatAfterId}`);
+    const messages = await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/messages?afterId=${chatAfterId}`, 'GET', undefined, {admin: false});
+    if (!chatOpen || generation !== chatGeneration) return;
     if (messages.length) {
-      let lastDay = '';
+      let lastDay = log.dataset.lastDay || '';
       for (const message of messages) {
+        if (log.querySelector(`[data-message-id="${Number(message.id)}"]`)) continue;
         const day = new Date(message.createdAt).toLocaleDateString();
         if (day !== lastDay) {
           const separator = document.createElement('div');
@@ -1077,6 +1144,7 @@ async function pollChatMessages(initial = false) {
           separator.textContent = day;
           log.appendChild(separator);
           lastDay = day;
+          log.dataset.lastDay = day;
         }
         const bubble = document.createElement('div');
         bubble.className = `max-w-[82%] rounded-2xl px-3 py-2 ${message.sender === 'visitor' ? 'ml-auto text-white bg-gradient-to-r from-tinder-pink to-tinder-orange' : 'mr-auto bg-white border border-zinc-200 text-zinc-900'}`;
@@ -1093,8 +1161,14 @@ async function pollChatMessages(initial = false) {
       }
       if (initial || nearBottom) scrollChatToBottom(true);
       else document.getElementById('newMessagesPill').classList.remove('hidden');
+      if (messages.some(message => message.sender === 'member')) {
+        await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`, 'POST', undefined, {admin: false});
+        if (chatOpen && generation === chatGeneration) await loadConversations();
+      }
     }
-  } catch (err) {}
+  } catch (err) {
+    if (initial && chatOpen && generation === chatGeneration) showToast('Messages unavailable', err.message);
+  } finally { chatPolls.delete(generation); }
 }
 
 function scrollChatToBottom(force) {
@@ -1125,32 +1199,39 @@ function chatComposerInput() {
 }
 function chatComposerKeydown(event) {
   if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventEventDefault ? event.preventEventDefault() : event.preventDefault();
+    event.preventDefault();
     sendChatMessage();
   }
 }
 async function sendChatMessage() {
-  if (!chatProfileId) return;
+  if (!chatProfileId || chatSending) return;
   const composer = document.getElementById('chatComposer');
   const sendButton = document.getElementById('chatSendButton');
   const body = composer.value.trim();
   if (!body) return;
+  if (body.length > 1000) return showToast('Message too long', 'Use 1000 characters or fewer.');
+  const profileId = chatProfileId, generation = chatGeneration;
+  chatSending = true;
   sendButton.disabled = true;
   composer.disabled = true;
   document.getElementById('chatError').classList.add('hidden');
   const optimistic = appendOptimisticMessage(body);
   try {
-    const sent = await apiCall(`/me/conversations/${encodeURIComponent(chatProfileId)}/messages`, 'POST', { body });
-    optimistic.dataset.messageId = String(sent.id);
-    chatAfterId = Math.max(chatAfterId, Number(sent.id));
+    await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/messages`, 'POST', { body }, {admin: false});
+    optimistic.remove();
+    if (generation !== chatGeneration) return;
+    chatFailedPayload = null;
     composer.value = '';
     chatComposerInput();
+    await pollChatMessages();
   } catch (err) {
-    optimistic.classList.add('opacity-60');
+    optimistic.remove();
+    if (generation !== chatGeneration) return;
     chatFailedPayload = body;
     document.getElementById('chatErrorText').textContent = err.message || 'Could not send message';
     document.getElementById('chatError').classList.remove('hidden');
   } finally {
+    chatSending = false;
     sendButton.disabled = false;
     composer.disabled = false;
   }
@@ -1208,19 +1289,22 @@ function updateMatchesUI() {
         openProfileScreen(item);
       };
       row.innerHTML = `
-        <img src="${item.image}" class="w-12 h-12 rounded-xl object-cover" />
+        <img src="${escapeHtml(safeImageUrl(item.image))}" class="w-12 h-12 rounded-xl object-cover" />
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
-            <h4 class="font-extrabold text-xs text-zinc-900 truncate">${item.name}</h4>
+            <h4 class="font-extrabold text-xs text-zinc-900 truncate">${escapeHtml(item.name)}</h4>
             ${item.isSuper ? `<span class="text-[9px] bg-sky-100 text-sky-600 px-1.5 py-0.2 rounded font-black">SUPER</span>` : ''}
           </div>
-          <p class="text-[11px] text-zinc-500 truncate">${item.role}</p>
+          <p class="text-[11px] text-zinc-500 truncate">${escapeHtml(item.role)}</p>
         </div>
-        <button onclick="event.stopPropagation(); directContactProfile('${item.details.email}')" class="px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold hover:bg-tinder-coral transition-colors flex items-center gap-1">
+        <button type="button" data-contact class="px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold hover:bg-tinder-coral transition-colors flex items-center gap-1">
           <i data-lucide="mail" class="w-3.5 h-3.5"></i>
           <span>Ping</span>
         </button>
       `;
+      row.querySelector('[data-contact]').addEventListener('click', event => {
+        event.stopPropagation(); directContactProfile(item.details?.email || '');
+      });
       list.appendChild(row);
     });
   }
@@ -1235,6 +1319,9 @@ async function resetDeck() {
     renderDeck();
     showToast('Deck Reloaded', 'Latest profiles loaded');
   } catch (error) {
+    backendAvailable = false;
+    showBackendNotice(true);
+    updateDynamicCounts();
     cardsState = [...PROFILES];
     renderDeck();
     showToast('Backend unavailable', 'Showing the read-only fallback roster');
@@ -1265,7 +1352,7 @@ function toggleInfoModal() {
 }
 
 function directContactProfile(email) {
-  window.location.href = safeHref(`mailto:${encodeURIComponent(email)}?subject=Matched%20on%20Team%20Portfolio!`);
+  window.location.href = safeHref(`mailto:${encodeURIComponent(email)}?subject=Matched%20on%20Rizzume!`);
 }
 
 function directContactCurrentProfile() {
@@ -1312,6 +1399,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Check if opened via QR link (e.g., ?profile=fontelar-dave)
+  renderDirectory();
+  renderDeck();
   const urlParams = typeof URLSearchParams === 'undefined'
     ? { get: () => null }
     : new URLSearchParams((window.location && window.location.search) || '');
@@ -1321,18 +1410,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Initialize or resume session with backend safely inside an async function
-  try {
-    await apiCall('/session', 'POST');
-  } catch (err) {
-    console.error("Session init error:", err);
-    showToast('Backend unavailable', 'You can still explore the team.');
+  const chatId = urlParams.get('chat');
+  if (chatId && backendAvailable && PROFILES.some(profile => profile.id === chatId)) {
+    await openChat(chatId);
+    return;
   }
 
-  // 2. Load mode state
+  // Restore the selected browsing mode
   let mode = null;
   try {
-    mode = sessionStorage.getItem('pitchrMode');
+    mode = sessionStorage.getItem('rizzumeMode');
   } catch (e) {}
 
   if (mode === 'swipe' || mode === 'directory') {

@@ -130,3 +130,15 @@ body.lightbox-open { overflow: hidden; }
   from { background-position: 100% 0; }
   to { background-position: -120% 0; }
 }
+/* Native dialog provides focus trapping and Escape handling for profile management. */
+.profile-editor { width: min(94vw, 640px); max-height: 90vh; overflow-y: auto; padding: 1.5rem; border: 1px solid #fce7f3; border-radius: 1.5rem; color: #18181b; }
+.profile-editor::backdrop { background: rgb(0 0 0 / .6); }
+.editor-fields { display: grid; gap: .75rem; }
+.editor-label { display: grid; gap: .3rem; font-size: .85rem; font-weight: 700; }
+.editor-label input:not([type=checkbox]), .editor-label textarea { width: 100%; border: 1px solid #d4d4d8; border-radius: .6rem; padding: .6rem; font-weight: 400; }
+.editor-primary, .editor-secondary { border-radius: .6rem; padding: .6rem .8rem; font-size: .8rem; font-weight: 700; }
+.editor-primary { background: #db2777; color: white; }
+.editor-secondary { background: #f4f4f5; color: #27272a; }
+.editor-image-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.editor-image-row img { width: 64px; height: 64px; border-radius: .6rem; object-fit: cover; }
+button:disabled { opacity: .5; cursor: not-allowed; }

@@ -1,57 +1,25 @@
 package com.pitchr.backend;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+import jakarta.validation.constraints.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.CacheControl;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseCookie;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.CookieValue;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
-
-import jakarta.annotation.PostConstruct;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 
 @RestController
 @Validated
 @RequestMapping("/api")
 public class PortfolioController {
     static final String COOKIE = "PITCHR_SESSION";
-    private static final Logger log = LoggerFactory.getLogger(PortfolioController.class);
     private final PortfolioService service;
     private final String teamEmail;
     private final boolean secureCookie;
@@ -71,7 +39,7 @@ public class PortfolioController {
 
     @GetMapping({"", "/"})
     public Map<String, Object> index() {
-        return Map.of("name", "pitchr.", "endpoints", Map.of(
+        return Map.of("name", "Rizzume", "endpoints", Map.of(
             "profiles", "GET /api/profiles",
             "profile", "GET /api/profiles/{id}",
             "session", "POST /api/session",
@@ -232,7 +200,7 @@ public class PortfolioController {
 
     /** Existing team contact endpoint is unchanged. */
     @GetMapping("/team")
-    public Map<String, String> team() { return Map.of("name", "pitchr.", "email", teamEmail); }
+    public Map<String, String> team() { return Map.of("name", "Rizzume", "email", teamEmail); }
 
     /** Constant-time comparison avoids leaking key-prefix information through response timing. */
     private void requireAdminKey(String supplied) {

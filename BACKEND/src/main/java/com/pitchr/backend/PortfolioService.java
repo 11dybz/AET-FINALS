@@ -75,13 +75,15 @@ public class PortfolioService {
     @Transactional
     public void deleteProfile(String id) {
         Profile profile = requireProfile(id);
+        messages.deleteAllByProfileId(id);
+        messages.flush();
         swipes.deleteAllByProfileId(id);
         profiles.delete(profile);
     }
 
     @Transactional
     public List<ProfileResponse.Image> addImageFiles(String profileId, List<MultipartFile> files) {
-        requireProfile(profileId);
+        requireProfileForUpdate(profileId);
         if (files == null || files.isEmpty()) throw badRequest("Select at least one image file");
         long existing = images.countByProfileId(profileId);
         if (existing + files.size() > MAX_IMAGES) throw badRequest("A profile can have at most 8 images");
@@ -107,7 +109,7 @@ public class PortfolioService {
 
     @Transactional
     public List<ProfileResponse.Image> addImageUrl(String profileId, String url) {
-        requireProfile(profileId);
+        requireProfileForUpdate(profileId);
         validateHttpUrl(url, "image URL");
         if (images.countByProfileId(profileId) >= MAX_IMAGES) throw badRequest("A profile can have at most 8 images");
         int order = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId).size();
@@ -118,7 +120,7 @@ public class PortfolioService {
 
     @Transactional
     public void deleteImage(String profileId, Long imageId) {
-        requireProfile(profileId);
+        requireProfileForUpdate(profileId);
         ProfileImage image = images.findById(imageId).filter(row -> row.profileId.equals(profileId))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Image not found"));
         images.delete(image);
@@ -128,7 +130,7 @@ public class PortfolioService {
 
     @Transactional
     public void reorderImages(String profileId, List<Long> imageIds) {
-        requireProfile(profileId);
+        requireProfileForUpdate(profileId);
         List<ProfileImage> current = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId);
         if (imageIds == null || imageIds.size() != current.size()
             || new HashSet<>(imageIds).size() != current.size()) throw badRequest("imageIds must contain every current image id exactly once");
@@ -258,6 +260,7 @@ public class PortfolioService {
 
     public List<TeamConversationResponse> teamConversations(String profileId) {
         return swipes.findAll().stream()
+            .filter(s -> s.session.expiresAt.isAfter(Instant.now()))
             .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
             .filter(s -> profileId == null || profileId.isBlank() || s.profile.id.equals(profileId))
             .map(swipe -> {
@@ -311,6 +314,12 @@ public class PortfolioService {
     }
 
     private void applyEditableFields(Profile profile, ProfileRequest request) {
+        if (request.details() != null) {
+            if (request.details().github() != null && !request.details().github().isBlank())
+                validateHttpUrl(request.details().github(), "GitHub URL");
+            if (request.details().linkedin() != null && !request.details().linkedin().isBlank())
+                validateHttpUrl(request.details().linkedin(), "LinkedIn URL");
+        }
         profile.name = request.name().trim();
         profile.persona = request.persona();
         profile.age = request.age();
@@ -377,6 +386,11 @@ public class PortfolioService {
 
     private Profile requireProfile(String id) {
         return profiles.findById(id).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+    }
+
+    private Profile requireProfileForUpdate(String id) {
+        return profiles.findForUpdate(id).orElseThrow(() ->
             new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
     }
 

@@ -1,4 +1,4 @@
-# pitchr. backend
+# Rizzume backend
 
 Spring Boot 4.1.2, Java 17, Spring MVC, Spring Data JPA, Bean Validation, and Flyway. It serves the vanilla-JS/Tailwind frontend from the sibling `FRONTEND/` folder. Local development uses file-backed H2; the `supabase` profile uses Supabase PostgreSQL in the dedicated `pitchr` schema. Hibernate runs with `ddl-auto=validate`, so schema changes must be introduced as new Flyway migrations. Do not edit V1 or V2.
 
@@ -46,11 +46,11 @@ Profile request validation enforces: name 1–100 characters and required; perso
 
 Each profile supports at most 8 images. Each upload is limited to 5 MB and accepted only when its magic bytes identify JPEG, PNG, WebP, or GIF. SVG is not accepted. The server does not trust the browser's Content-Type header. Uploaded bytes are stored in `profile_image_blobs`; `profile_images` contains only metadata, so profile list responses do not load blobs. The two-table layout uses a binary/VARBINARY mapping compatible with PostgreSQL `BYTEA` and H2 binary-varying storage. Multipart limits are 5 MB per part and 42 MB per request.
 
-The V3 migration backfills an image-gallery row for each seeded profile and changes the seed cover paths to the local files already served by the frontend: `/images/chee.jpg`, `/images/greg.jpg`, `/images/dave.jpg`, and `/images/justin.jpg`.
+The V4 migration backfills an image-gallery row for each seeded profile and changes the seed cover paths to the local files already served by the frontend: `/images/chee.jpg`, `/images/greg.jpg`, `/images/dave.jpg`, and `/images/justin.jpg`.
 
 ### Write protection
 
-Profile and gallery `POST`, `PUT`, and `DELETE` requests are protected when `ADMIN_KEY` is nonblank. Send it in the `X-Admin-Key` header. The comparison uses `MessageDigest.isEqual`; a missing or incorrect key returns 403. Public `GET` routes are unchanged. When `ADMIN_KEY` is blank (the default for local/demo use), write routes remain open and the application logs a startup warning. The frontend prompts for the key after a 403 and keeps it in page memory only; it is not written to browser storage.
+Profile and gallery `POST`, `PUT`, and `DELETE` requests are protected when `ADMIN_KEY` is nonblank. Send it in the `X-Admin-Key` header. The comparison uses `MessageDigest.isEqual`; a missing or incorrect key returns 403. Public `GET` routes are unchanged. When `ADMIN_KEY` is blank (the default for local/demo use), write routes remain open. The frontend prompts for the key after a 403 and keeps it in page memory only; it is not written to browser storage.
 
 For the default local H2 profile, export `ADMIN_KEY` in the process environment (or set `pitchr.admin-key` in `application.properties`); the default profile does not import `.env`. The Supabase profile imports `BACKEND/.env`, which is parsed as Java properties: do not add `export` or surrounding quotes.
 
@@ -131,9 +131,9 @@ Invoke-RestMethod "$base/me/matches" -WebSession $visitor
 
 Spring Boot serves the homepage at `/`, all four member portfolio pages, and the frontend assets. The frontend uses `/api` on the same origin, so it follows the backend's current port automatically. Session initialization uses the shared request helper and shows a message if the backend is unavailable.
 
-The profile overlay displays every card, including newly created profiles. Gallery images use horizontal scroll snapping, dots/counter, arrow buttons, and a fullscreen lightbox with keyboard/touch navigation. The four manually maintained member pages remain as they were; their links are shown from the overlay rather than causing automatic redirects.
+The profile overlay displays every card, including newly created profiles. Gallery images use horizontal scroll snapping, dots/counter, arrow buttons, and a fullscreen lightbox with keyboard/touch navigation. The four member pages load current profile data from the backend and persist likes through the visitor session. Their links are shown from the overlay.
 
-The frontend uses `credentials: 'include'` for API calls. A separately hosted frontend can set `window.PITCHR_API_BASE = 'http://localhost:8081/api'` before loading `script.js`. The default CORS allowlist is `http://localhost:5500` and `http://127.0.0.1:5500`; set `ALLOWED_ORIGINS` to your deployed frontend origin(s).
+The frontend uses `credentials: 'include'` for API calls. A separately hosted frontend can set `window.RIZZUME_API_BASE = 'http://localhost:8081/api'` before loading `script.js`. The default CORS allowlist is `http://localhost:5500` and `http://127.0.0.1:5500`; set `ALLOWED_ORIGINS` to your deployed frontend origin(s).
 
 Run frontend regression tests from the repository root:
 
@@ -153,7 +153,7 @@ node --test FRONTEND/tests/app.test.cjs
 | `ALLOWED_ORIGINS` | localhost ports 5500 | Comma-separated allowed frontend origins |
 | `COOKIE_SECURE` | `false` | Set `true` behind HTTPS |
 
-For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Profile editing/admin authentication and server-side mail delivery are outside the current frontend flow.
+For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Profile and gallery editing use the configured admin key. The team inbox uses TEAM_INBOX_KEY; server-side email delivery is not implemented.
 
 ## Source layout
 
@@ -167,3 +167,19 @@ For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE
 - `PortfolioApiTests`: HTTP integration tests covering profile shape, visitor isolation, retry/concurrency handling, upgrades, passes, invalid input, expiry, and allowed origins.
 - `PostgresApiTests`: runs the same HTTP suite against a real temporary PostgreSQL server and checks schema isolation. Uses [embedded-postgres](https://github.com/zonkyio/embedded-postgres) test binaries; no Docker or Supabase credentials are required. Tests do not read `.env` or access your remote database.
 - `application-supabase.properties`, `.env.example`: Supabase connection profile and local configuration template.
+
+## Rizzume maintenance and checks
+
+The website, API metadata and Spring application display name use **Rizzume**. Existing Java package names, database paths/schema, configuration properties, Maven artifact name and visitor cookie remain compatible with existing installations. No database migration or reset is needed for the rename. The legacy window.PITCHR_API_BASE setting remains supported, while new setups should use window.RIZZUME_API_BASE on all pages.
+
+Profile management is implemented in FRONTEND/editor.js. Add a profile, save it, then upload or link images. Existing images can be removed and reordered. Admin keys stay in memory. The member portfolio pages use FRONTEND/profile.js. The team inbox uses FRONTEND/team-inbox.js and requires TEAM_INBOX_KEY in the backend environment (or the Supabase .env file).
+
+Additional regression checks:
+
+```powershell
+node --test FRONTEND/tests/*.test.cjs
+cd BACKEND
+.\mvnw.cmd "-Dtest=PortfolioWorkflowTests" test
+```
+
+PortfolioWorkflowTests exercises controllers, validation, migrations and persistence against isolated in-memory H2 using MockMvc, without a listening HTTP port or production database credentials. It covers profile edits, image uploads, MIME validation, conversation ownership, team replies, read receipts and deletion with existing messages. The existing HTTP and embedded PostgreSQL suites still run with the normal Maven test command in an environment that permits local network connections.

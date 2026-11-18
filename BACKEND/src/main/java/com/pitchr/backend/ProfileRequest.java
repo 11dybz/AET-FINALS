@@ -21,7 +21,7 @@ public record ProfileRequest(
     /** Nested request mirrors the existing details JSON structure, including project `desc`. */
     public record DetailsRequest(
         @Size(max = 4000) String fullBio,
-        @Size(max = 10) List<@Valid ProjectRequest> projects,
+        @Size(max = 10) List<@NotNull @Valid ProjectRequest> projects,
         @Pattern(regexp = "^$|https?://.+", message = "must be an http(s) URL") @Size(max = 255) String github,
         @Pattern(regexp = "^$|https?://.+", message = "must be an http(s) URL") @Size(max = 255) String linkedin,
         @Email @Size(max = 255) String email
