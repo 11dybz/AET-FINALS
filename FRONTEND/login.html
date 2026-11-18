@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Log in | Rizzume</title><link rel="stylesheet" href="auth.css"></head>
+<body class="auth-page" data-auth-mode="login">
+  <div class="auth-layout">
+    <aside class="auth-story" aria-label="Welcome to Rizzume">
+      <a class="auth-brand" href="login.html" aria-label="Rizzume home"><svg viewBox="0 0 24 26" aria-hidden="true"><path d="M12 2c2 5 8 7 8 14a8 8 0 0 1-16 0c0-4 2-6 4-8 0 3 1 5 3 5 2-3 2-6 1-11Z"/></svg>rizzume</a>
+      <div class="auth-story-copy"><p class="auth-eyebrow">Good people. Great possibilities.</p><h1>A little spark.<br>A great<br><em>connection.</em></h1><p>Discover the people behind the code.<br>Your next great project starts with a hello.</p></div>
+      <div class="auth-showcase" aria-hidden="true"><div class="auth-floating-label">Your next collaborator is here.</div><div class="auth-photo"><img src="images/chee.jpg" alt=""><div class="auth-photo-caption">Reynaldo Joseph<small><br>Full Stack Developer</small></div></div><div class="auth-photo"><img src="images/dave.jpg" alt=""><div class="auth-photo-caption">Dave<small><br>Full-Stack & Systems Developer</small></div></div><span class="auth-spark">&#9829;</span></div>
+      <p class="auth-story-footer"><span></span>A team portfolio. A place to connect. Something worth building.</p>
+    </aside>
+    <main class="auth-main">
+      <a class="auth-brand" href="login.html" aria-label="Rizzume home">rizzume</a>
+      <div class="auth-switch"><span>New around here?</span><a href="register.html" data-auth-switch>Create an account &rarr;</a></div>
+      <section class="auth-form-wrap" aria-labelledby="authTitle"><p class="auth-eyebrow">Your next chapter starts here</p><h2 id="authTitle">Welcome back.</h2><p class="auth-intro">Good to see you again. Log in to pick up<br>where you left off.</p>
+        <form id="authForm" class="auth-form" novalidate>
+          <div class="auth-field"><label for="email">Email address</label><input id="email" name="email" type="email" maxlength="254" autocomplete="username" placeholder="you@example.com" required><small id="emailError" class="auth-field-error" hidden></small></div>
+          <div class="auth-field"><label for="password">Password</label><div class="auth-password"><input id="password" name="password" type="password" maxlength="128" autocomplete="current-password" placeholder="Enter your password" required><button type="button" data-toggle-password="password" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><small id="passwordError" class="auth-field-error" hidden></small></div>
+          <p id="authFeedback" class="auth-form-feedback" role="alert" hidden></p>
+          <button id="authSubmit" class="auth-submit" type="submit"><span>Log in</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button>
+        </form>
+        <p class="auth-signoff"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10h14v11H5V10Zm3 0V6a4 4 0 0 1 8 0v4"/></svg>Your connections, right where you left them.</p>
+      </section>
+      <footer class="auth-bottom">Rizzume &middot; Find your people. Build something great.</footer>
+    </main>
+  </div>
+  <script src="account.js"></script><script src="auth-page.js"></script>
+</body></html>

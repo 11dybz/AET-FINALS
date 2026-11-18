@@ -11,6 +11,28 @@ cd BACKEND
 
 Open `http://localhost:8080/`. The app creates `BACKEND/data/pitchr.mv.db` when launched from `BACKEND`; use the same working directory to reuse the database.
 
+### Login and registration
+
+Open `/login.html` or `/register.html` (aliases `/login` and `/register` also work). The discovery workspace now checks the signed-in account before loading; individual public portfolio pages remain readable. Registration asks for full name, email, password, and password confirmation. Successful registration signs in immediately. There are no password recovery controls or endpoints, social sign-in, or email-verification flows in this version.
+
+Accounts use Spring Boot authentication stored in the existing application database. With the Supabase profile, V6 creates **pitchr.accounts** and **pitchr.account_sessions** automatically at startup. These accounts are separate from Supabase Auth's `auth.users`; no Supabase JavaScript API key or Auth dashboard configuration is required. The four seeded portfolio profiles are not pre-created login accounts: register an account using the new page.
+
+Passwords must contain 10–128 characters and are stored as salted PBKDF2-HMAC-SHA256 hashes with 600,000 iterations. Login cookies contain fresh random tokens; the database stores only their SHA-256 digests. Cookies are HttpOnly and SameSite=Lax, expire after seven days, and become Secure when `COOKIE_SECURE=true` (set this for HTTPS hosting). Logout revokes the current credential, clears its cookie, and ends active account calls. Matches, conversations, and notifications use a private, persistent workspace, so signing in again restores them. A workspace ID is not accepted as a login credential. Existing guest data is not automatically moved into new accounts. Legacy visitor APIs remain available for public portfolio clients, with account workspaces excluded from anonymous access.
+
+Authentication endpoints are `/api/auth/register` (POST JSON), `/api/auth/login` (POST JSON), `/api/auth/me` (GET), and `/api/auth/logout` (POST). Credentials never go into browser storage. Redirects are limited to known pages on the same origin, form submissions reject untrusted browser origins, and registration/login attempts are limited to 20 per client address per ten minutes in each running backend instance. Existing admin and team keys remain separate permissions; registration never grants team-inbox or admin access.
+
+After updating the code, stop the running backend and restart with the same profile:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=supabase"
+```
+
+Authentication and portfolio checks against isolated H2 databases, without opening server ports:
+
+```powershell
+.\mvnw.cmd "-Dtest=AccountWorkflowTests,PortfolioWorkflowTests" test
+```
+
 ### Discovery, video calls, maps, and notifications
 
 The frontend opens into a Tinder-inspired discovery deck, with desktop navigation and a mobile bottom bar. Preferences filter the deck by name, skill, role, or city. The directory and profile editor remain available under **Explore the team**.
@@ -76,9 +98,13 @@ Each profile supports at most 8 images. Each upload is limited to 5 MB and accep
 
 The V4 migration backfills an image-gallery row for each seeded profile and changes the seed cover paths to the local files already served by the frontend: `/images/chee.jpg`, `/images/greg.jpg`, `/images/dave.jpg`, and `/images/justin.jpg`.
 
-### Write protection
+### Profile ownership and write protection
 
-Profile and gallery `POST`, `PUT`, and `DELETE` requests are protected when `ADMIN_KEY` is nonblank. Send it in the `X-Admin-Key` header. The comparison uses `MessageDigest.isEqual`; a missing or incorrect key returns 403. Public `GET` routes are unchanged. When `ADMIN_KEY` is blank (the default for local/demo use), write routes remain open. The frontend prompts for the key after a 403 and keeps it in page memory only; it is not written to browser storage.
+Each account can own one profile, and a profile can have only one account owner. V7 adds the unique `accounts.profile_id` foreign key and links the existing account `reychee06@gmail.com` to the seeded `chee-reynaldo` profile, comparing the email without case sensitivity. This assignment applies to an account that exists when V7 runs. Public registration cannot claim a seeded profile merely by supplying its name, email, or ID. If the requested account is created later, a trusted operator must assign it in the database after checking the account.
+
+Signed-in users can create one profile and can update or delete only their own profile. The same ownership check covers file uploads, image URLs, gallery ordering, and image deletion. These checks run in the backend for every write. A signed-in user cannot use an admin header to edit another profile. Anonymous and legacy visitor cookies cannot write profiles when `ADMIN_KEY` is blank. Trusted server-side maintenance without an account cookie may use a configured `X-Admin-Key`, compared in constant time; the browser editor never asks for this key or sends an override.
+
+`GET /api/me/profile` returns the current account's profile, or 404 if it has not created one. `/api/auth/me` includes `user.profileId`. **My profile** is available in the sidebar and the account menu. Directory and full-profile views show management controls only on the owned profile. Accounts without a profile can select **Create my profile**. After deleting an owned profile, the foreign key clears the account link so that another can be created. Profile contact-email edits never change ownership.
 
 For the default local H2 profile, export `ADMIN_KEY` in the process environment (or set `pitchr.admin-key` in `application.properties`); the default profile does not import `.env`. The Supabase profile imports `BACKEND/.env`, which is parsed as Java properties: do not add `export` or surrounding quotes.
 
@@ -181,7 +207,7 @@ node --test FRONTEND/tests/app.test.cjs
 | `ALLOWED_ORIGINS` | localhost ports 5500 | Comma-separated allowed frontend origins |
 | `COOKIE_SECURE` | `false` | Set `true` behind HTTPS |
 
-For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Profile and gallery editing use the configured admin key. The team inbox uses TEAM_INBOX_KEY; server-side email delivery is not implemented.
+For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE_DB_USERNAME`, and `SUPABASE_DB_PASSWORD` instead of the local `DB_*` settings. The PostgreSQL JDBC driver and Flyway PostgreSQL module are bundled. Keep the API and frontend on the same site when deploying, configure HTTPS, and set COOKIE_SECURE=true. Signed-in accounts can edit only their own linked profile and gallery; the configured admin key is reserved for explicit maintenance without an account session. The team inbox uses TEAM_INBOX_KEY; server-side email delivery is not implemented.
 
 ## Source layout
 
@@ -200,7 +226,11 @@ For Supabase, enable the `supabase` profile and use `SUPABASE_DB_URL`, `SUPABASE
 
 The website, API metadata and Spring application display name use **Rizzume**. Existing Java package names, database paths/schema, configuration properties, Maven artifact name and visitor cookie remain compatible with existing installations. No database migration or reset is needed for the rename. The legacy window.PITCHR_API_BASE setting remains supported, while new setups should use window.RIZZUME_API_BASE on all pages.
 
-Profile management is implemented in FRONTEND/editor.js. Add a profile, save it, then upload or link images. Existing images can be removed and reordered. Admin keys stay in memory. The member portfolio pages use FRONTEND/profile.js. The team inbox uses FRONTEND/team-inbox.js and requires TEAM_INBOX_KEY in the backend environment (or the Supabase .env file).
+Profile management is implemented in FRONTEND/editor.js. Signed-in users choose **My profile** to edit their own card, biography, skills, highlights, projects, photos and public contact links. The server enforces ownership on all profile and gallery mutations. A new account creates one profile before adding photos. The first photo is the card cover; photo changes save immediately, while text changes use **Save changes**. The member portfolio pages use FRONTEND/profile.js. The team inbox uses FRONTEND/team-inbox.js and requires TEAM_INBOX_KEY in the backend environment (or the Supabase .env file).
+
+The editor opens from the loaded roster and patches returned profile data locally after saves, preserving the swipe stack. Independent startup reads run concurrently after authentication. Roster and match reads batch gallery metadata and ordered detail collections rather than querying each profile separately. ProfileLoadingTests verifies five queries for a roster of up to 50 profiles (larger rosters need additional collection batches); uploaded image bytes are fetched only when an image URL is requested. Restart the backend after Java changes to activate these query improvements.
+
+FRONTEND/tests/profile-editor.fixture.html is an isolated browser fixture with sample data and a mock API. It is excluded from the packaged application. For visual checks, temporarily copy it to target/classes/static/profile-editor.fixture.html while the local server is running; remove that copy afterward. It supports live previews, project editing, photo ordering, creation, and a failed-save retry without changing application accounts or profiles.
 
 Additional regression checks:
 
@@ -211,3 +241,17 @@ cd BACKEND
 ```
 
 PortfolioWorkflowTests exercises controllers, validation, migrations and persistence against isolated in-memory H2 using MockMvc, without a listening HTTP port or production database credentials. It covers profile edits, image uploads, MIME validation, conversation ownership, team replies, read receipts and deletion with existing messages. The existing HTTP and embedded PostgreSQL suites still run with the normal Maven test command in an environment that permits local network connections.
+
+## Profile and messaging workspace
+
+### Resume PDF export
+
+Signed-in users can select **Download PDF** in My profile or **Download resume PDF** in the account menu. The download uses the current saved profile from the ownership-protected `/api/me/profile` endpoint; save edits first to include them. It includes the public name, role, location and contact email, bio, skills, projects, highlights, and valid GitHub/LinkedIn links. Account credentials, private sign-in email, matches, and messages are excluded. A saved profile is required.
+
+The exporter creates an A4 PDF in the browser with selectable text, automatic wrapping and page breaks, clickable web links, and page numbers. Empty sections are omitted. Decorative leading checkmarks on highlights become ordinary list markers. Text outside the standard PDF font's character set uses browser-rendered image runs, which remain visible but are not selectable. The locally bundled MIT-licensed pdf-lib 1.17.1 is loaded only on export; no CDN, external PDF service, additional Maven dependency, or database migration is needed. Maven bundles `FRONTEND/vendor/**` with the frontend. Run `node --test FRONTEND/tests/resume.test.cjs` to check PDF contents, pagination, access checks, downloads, and retry behavior.
+
+The profile editor has separate card, about, projects, photos and links sections, a live card preview, a mobile preview toggle, field limits and unsaved-change protection. Updated assets use a versioned URL to avoid showing an old editor from the browser cache.
+
+FRONTEND/messages.js and messages.css provide the inbox and conversation layout. Desktop keeps both panes visible. Mobile switches between inbox and thread, keeps drafts per connection in memory, and avoids automatically opening the keyboard. Empty, loading, search, unread-filter, failed-load, pending-send and failed-send states keep the same layout. Inbox requests and conversation requests reject stale responses after navigation. Drafts are never stored in browser storage.
+
+For isolated visual checks with the local backend already running, run `node FRONTEND/tests/prepare-preview.cjs` from the repository root. The generated workspace.fixture.html uses mock API responses and cannot write to real accounts or conversations. Choose a documented state in its query string: empty, fresh, filled, error, thread-error, loading or inbox-loading. The fixture files are not included by Maven's frontend resource include patterns; remove the temporary copies from target/classes/static after checking and before packaging.

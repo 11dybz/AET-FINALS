@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Rizzume • Team Portfolio</title>
   
   <!-- Tailwind CSS -->
@@ -19,8 +19,11 @@
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
   <!-- External Stylesheet -->
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="experience.css">
+  <link rel="stylesheet" href="style.css?v=20261118-4">
+  <link rel="stylesheet" href="experience.css?v=20261118-4">
+  <link rel="stylesheet" href="auth.css?v=20261118-4">
+  <link rel="stylesheet" href="profile-editor.css?v=20261118-4">
+  <link rel="stylesheet" href="messages.css?v=20261118-4">
 
   <script>
     tailwind.config = {
@@ -53,7 +56,7 @@
     }
   </script>
 </head>
-<body class="bg-gradient-to-br from-[#FFF1F2] via-[#FDF2F8] to-[#F3E8FF] text-zinc-900 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-tinder-pink selection:text-white">
+<body data-account-required="true" class="auth-pending bg-gradient-to-br from-[#FFF1F2] via-[#FDF2F8] to-[#F3E8FF] text-zinc-900 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-tinder-pink selection:text-white">
 
   <!-- ==================== VIEW 1: HOME PAGE SELECTION ==================== -->
   <p id="backendNotice" role="status" class="hidden w-full text-center text-sm p-3 bg-amber-50 text-amber-900"></p>
@@ -191,6 +194,7 @@
     <!-- Main Deck Container -->
     <main class="w-full max-w-md mx-auto px-4 flex-1 flex flex-col justify-center items-center relative my-1">
       <div id="deckContainer" class="relative w-full aspect-[3/4.6] max-h-[580px] min-h-[520px]">
+        <div id="workspaceLoading" class="workspace-loading-card" role="status"><div></div><span>Finding your people…</span><p>Getting your workspace ready.</p></div>
         <!-- Empty state -->
         <div id="emptyDeck" class="absolute inset-0 bg-white rounded-3xl p-8 border border-pink-100 shadow-soft flex flex-col items-center justify-center text-center hidden z-0">
           <div class="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mb-4 text-tinder-pink animate-pulse-subtle">
@@ -331,36 +335,27 @@
     </div>
   </aside>
 
-  <!-- CHAT SHEET -->
-  <section id="chatSheet" class="fixed inset-0 z-[60] bg-white opacity-0 pointer-events-none transition-opacity duration-200 hidden flex-col" role="dialog" aria-modal="true" aria-label="Messages">
-    <header class="h-14 px-3 border-b border-zinc-100 flex items-center gap-2 bg-white">
-      <button id="chatBackButton" onclick="closeChat()" class="w-11 h-11 rounded-full flex items-center justify-center text-zinc-700 focus:outline-none focus:ring-2 focus:ring-tinder-pink" aria-label="Close messages">
-        <i data-lucide="arrow-left" class="w-5 h-5"></i>
-      </button>
-      <div class="flex-1 min-w-0">
-        <h2 id="chatTitle" class="font-extrabold text-sm text-zinc-900">Messages</h2>
-        <p id="chatSubtitle" class="text-[11px] text-zinc-500"></p>
+  <!-- MESSAGES WORKSPACE -->
+  <section id="chatSheet" class="ms-workspace hidden" role="region" aria-label="Messages">
+    <header class="ms-heading"><div><span class="ms-eyebrow">KEEP THE CONNECTION GOING</span><h2>Messages<span>.</span></h2></div><button id="chatBackButton" type="button" onclick="closeChat()" class="ms-icon-button" aria-label="Close messages"><i data-lucide="x"></i></button></header>
+    <div id="chatBody" class="ms-layout">
+      <aside class="ms-inbox" aria-label="Conversation inbox">
+        <div class="ms-inbox-head"><div><h3>Your inbox</h3><span id="inboxCount">0 conversations</span></div><button type="button" onclick="discoverFromMessages()" class="ms-icon-button" aria-label="Find people to message" title="Find people to message"><i data-lucide="square-pen"></i></button></div>
+        <label class="ms-search"><i data-lucide="search"></i><span class="sr-only">Search conversations</span><input id="conversationSearch" type="search" placeholder="Search your connections" autocomplete="off" oninput="filterConversations()"></label>
+        <div class="ms-filters" aria-label="Filter conversations"><button id="inboxAll" type="button" aria-pressed="true" onclick="filterConversations('all')">All messages</button><button id="inboxUnread" type="button" aria-pressed="false" onclick="filterConversations('unread')">Unread<span id="inboxUnreadCount" hidden></span></button></div>
+        <div id="inboxNotice" class="ms-notice" hidden role="status"><span id="inboxNoticeText"></span><button type="button" onclick="loadConversations()">Retry</button></div>
+        <div id="conversationList" class="ms-conversations" aria-label="Conversations"></div>
+        <div class="ms-inbox-footer"><span class="ms-status-dot"></span>Your connections, in one place.</div>
+      </aside>
+      <div id="chatPlaceholder" class="ms-placeholder">
+        <header class="ms-thread-header"><div class="ms-avatar-placeholder"><i data-lucide="message-circle"></i></div><div class="ms-thread-identity"><h3>Your conversations</h3><p>A space for your next great idea.</p></div><button type="button" class="ms-icon-button" disabled aria-label="Select a conversation to make a video call"><i data-lucide="video"></i></button></header>
+        <div class="ms-welcome"><div class="ms-hello-art" aria-hidden="true"><span class="ms-art-spark">✦</span><div class="ms-art-bubble"><span></span><span></span><span></span></div><div class="ms-art-reply"><i data-lucide="heart"></i></div><span class="ms-art-dot"></span></div><span class="ms-eyebrow">A LITTLE HELLO GOES A LONG WAY</span><h3 id="inboxWelcomeTitle">Good things start<br>with a conversation.</h3><p id="inboxWelcomeText">Find someone who clicks. Share an idea.<br>Build something great together.</p><button type="button" onclick="discoverFromMessages()" class="ms-primary" id="inboxDiscover"><i data-lucide="compass"></i>Discover people</button><div class="ms-welcome-note"><i data-lucide="sparkles"></i>Your next connection could be a right swipe away.</div></div>
+        <div class="ms-disabled-composer"><div><button disabled type="button" aria-label="Choose a conversation before sharing a location"><i data-lucide="map-pin"></i></button><span>Choose a conversation to send a message</span><button disabled type="button" aria-label="Choose a conversation before sending"><i data-lucide="send"></i></button></div><p>Messages and video calls live here, once you connect.</p></div>
       </div>
-    </header>
-    <div id="chatBody" class="flex-1 min-h-0 flex">
-      <div id="conversationList" class="w-full overflow-y-auto p-3 space-y-2"></div>
-      <div id="threadView" class="hidden w-full min-h-0 flex-col">
-        <div id="messageLog" class="flex-1 overflow-y-auto p-4 space-y-3" role="log" aria-live="polite" aria-label="Conversation messages"></div>
-        <button id="newMessagesPill" onclick="scrollChatToBottom(true)" class="hidden absolute left-1/2 bottom-24 -translate-x-1/2 px-3 py-2 rounded-full bg-zinc-900 text-white text-xs font-bold">New messages</button>
-        <div class="border-t border-zinc-100 p-3 bg-white">
-          <div id="chatError" class="hidden mb-2 text-xs text-rose-600 flex items-center justify-between" role="alert">
-            <span id="chatErrorText"></span>
-            <button id="chatRetryButton" onclick="retryChatSend()" class="min-h-11 px-3 font-bold underline">Retry</button>
-          </div>
-          <div class="flex items-end gap-2">
-            <label for="chatComposer" class="sr-only">Message</label>
-            <textarea id="chatComposer" rows="1" maxlength="1000" class="flex-1 resize-none max-h-32 rounded-2xl border border-zinc-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-tinder-pink" placeholder="Write a message..." onkeydown="chatComposerKeydown(event)" oninput="chatComposerInput()"></textarea>
-            <button id="chatSendButton" onclick="sendChatMessage()" class="w-11 h-11 min-h-11 rounded-full bg-gradient-to-r from-tinder-pink to-tinder-orange text-white flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-tinder-pink" aria-label="Send message">
-              <i data-lucide="send" class="w-4 h-4"></i>
-            </button>
-          </div>
-          <div class="mt-1 text-right text-[10px] text-zinc-400"><span id="chatCharacterCount">0</span>/1000</div>
-        </div>
+      <div id="threadView" class="ms-thread hidden">
+        <header class="ms-thread-header"><button id="chatListButton" type="button" onclick="showConversationList()" class="ms-icon-button ms-list-back" aria-label="Back to conversations"><i data-lucide="arrow-left"></i></button><div class="ms-thread-avatar"><img id="chatAvatar" alt=""><span id="chatAvatarFallback"></span></div><div class="ms-thread-identity"><h3 id="chatTitle">Conversation</h3><p id="chatSubtitle"></p></div><div class="ms-thread-actions"><button id="chatVideoButton" type="button" class="ms-icon-button" aria-label="Start video call" title="Start video call"><i data-lucide="video"></i></button><button id="chatMapButton" type="button" class="ms-icon-button" aria-label="Open location map" title="Location"><i data-lucide="map-pin"></i></button></div></header>
+        <div class="ms-message-area"><div id="threadLoadNotice" class="ms-notice" hidden role="status"><span>Could not refresh this conversation.</span><button type="button" onclick="pollChatMessages(true)">Retry</button></div><div id="messageLog" class="ms-message-log" role="log" aria-live="polite" aria-label="Conversation messages"></div><div id="threadState" class="ms-thread-state" role="status"><div class="ms-thread-state-icon"><i data-lucide="message-circle"></i></div><h3 id="threadStateTitle">Loading your conversation…</h3><p id="threadStateText">Getting everything ready.</p><button id="threadLoadRetry" type="button" class="ms-secondary" onclick="pollChatMessages(true)" hidden>Try again</button></div><button id="newMessagesPill" type="button" onclick="scrollChatToBottom(true)" class="ms-new-messages hidden">New messages ↓</button></div>
+        <div class="ms-composer"><div id="chatError" class="ms-send-error hidden" role="alert"><span id="chatErrorText"></span><button id="chatRetryButton" type="button" onclick="retryChatSend()">Retry</button></div><div class="ms-composer-row"><label for="chatComposer" class="sr-only">Message</label><textarea id="chatComposer" rows="1" maxlength="1000" placeholder="Write a message…" onkeydown="chatComposerKeydown(event)" oninput="chatComposerInput()" disabled></textarea><button id="chatSendButton" type="button" onclick="sendChatMessage()" class="ms-send" aria-label="Send message" disabled><i data-lucide="arrow-up"></i></button></div><div class="ms-composer-meta"><span>Enter to send · Shift + Enter for a new line</span><span><span id="chatCharacterCount">0</span>/1000</span></div></div>
       </div>
     </div>
   </section>
@@ -460,10 +455,13 @@
     <p id="toastMessage" class="text-xs font-bold">Swiped Right!</p>
   </div>
 
-  <script src="script.js"></script>
-  <script src="editor.js"></script>
+  <script src="account.js?v=20261118-4"></script>
+  <script src="script.js?v=20261118-4"></script>
+  <script src="messages.js?v=20261118-4"></script>
+  <script src="resume.js?v=20261118-1"></script>
+  <script src="editor.js?v=20261118-4"></script>
   <script src="ui.js"></script>
   <script src="calls.js"></script>
-  <script src="experience.js"></script>
+  <script src="experience.js?v=20261118-4"></script>
 </body>
 </html>

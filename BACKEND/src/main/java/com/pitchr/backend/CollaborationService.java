@@ -18,12 +18,14 @@ public class CollaborationService {
     private final VideoCallRepository calls;
     private final CallSignalRepository signals;
     private final NotificationRepository notifications;
+    private final AccountService accounts;
     private final JsonMapper json = new JsonMapper();
 
     CollaborationService(SessionRepository sessions, SwipeRepository swipes, ProfileRepository profiles,
-                         VideoCallRepository calls, CallSignalRepository signals, NotificationRepository notifications) {
+                         VideoCallRepository calls, CallSignalRepository signals, NotificationRepository notifications, AccountService accounts) {
         this.sessions = sessions; this.swipes = swipes; this.profiles = profiles;
         this.calls = calls; this.signals = signals; this.notifications = notifications;
+        this.accounts = accounts;
     }
 
     void notify(String session, String profile, String kind, String body) {
@@ -111,7 +113,8 @@ public class CollaborationService {
         if (!team && !c.sessionId.equals(visitor)) throw failure(HttpStatus.NOT_FOUND, "Call not found");
         // Passing a profile revokes access to its call, including team access.
         matched(c.sessionId, c.profileId);
-        if (team) session(c.sessionId, false);
+        if (team) sessions.findById(c.sessionId).map(s -> (VisitorSession) org.hibernate.Hibernate.unproxy(s))
+            .filter(s -> s.expiresAt.isAfter(Instant.now())).orElseThrow(() -> failure(HttpStatus.NOT_FOUND, "Visitor session expired"));
         return c;
     }
 
@@ -132,9 +135,7 @@ public class CollaborationService {
     }
     private VisitorSession session(String token, boolean lock) {
         if (token == null || token.isBlank()) throw failure(HttpStatus.UNAUTHORIZED, "Create or resume a visitor session first");
-        return (lock ? sessions.findForUpdate(token) : sessions.findById(token))
-            .map(s -> (VisitorSession) org.hibernate.Hibernate.unproxy(s))
-            .filter(s -> s.expiresAt.isAfter(Instant.now())).orElseThrow(() -> failure(HttpStatus.UNAUTHORIZED, "Session expired"));
+        return accounts.resolve(token, lock).orElseThrow(() -> failure(HttpStatus.UNAUTHORIZED, "Session expired"));
     }
     private void matched(String session, String profile) {
         if (swipes.findBySessionIdAndProfileId(session, profile).filter(s -> s.action != Swipe.Action.pass).isEmpty())

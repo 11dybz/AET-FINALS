@@ -20,6 +20,11 @@ public class WebConfig implements WebMvcConfigurer {
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .allowedHeaders("Content-Type", "X-Admin-Key", "X-Team-Key").allowCredentials(true).maxAge(3600);
     }
+    @Override
+    public void addViewControllers(ViewControllerRegistry registry) {
+        registry.addViewController("/login").setViewName("forward:/login.html");
+        registry.addViewController("/register").setViewName("forward:/register.html");
+    }
 
     /** Disable caching for mutable API responses but permit immutable caching for uploaded images. */
     @Override

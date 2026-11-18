@@ -10,6 +10,9 @@ interface VideoCallRepository extends JpaRepository<VideoCall, String> {
     @Modifying
     @Query("update VideoCall c set c.state = 'ended' where c.sessionId = :session and c.profileId = :profile and c.state in ('ringing', 'accepted')")
     void revoke(String session, String profile);
+    @Modifying
+    @Query("update VideoCall c set c.state = 'ended' where c.sessionId = :workspace and c.state in ('ringing', 'accepted')")
+    void endWorkspaceCalls(String workspace);
     List<VideoCall> findBySessionIdAndStateInOrderByCreatedAtDesc(String sessionId, Collection<String> states);
     List<VideoCall> findByProfileIdAndStateInOrderByCreatedAtDesc(String profileId, Collection<String> states);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

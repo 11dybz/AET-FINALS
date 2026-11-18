@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'script.js'), 'utf8');
 const editorSource = fs.readFileSync(path.join(__dirname, '..', 'editor.js'), 'utf8');
+const messagesSource = fs.readFileSync(path.join(__dirname, '..', 'messages.js'), 'utf8');
 
 // Minimal browser-like objects let startup, state transitions, and pure editor helpers run without a real DOM.
 function app(options = {}) {
@@ -17,15 +18,16 @@ function app(options = {}) {
   let timerId = 0;
   function element() {
     return { classList: { add() {}, remove() {}, toggle() {} }, style: {}, dataset: {}, innerHTML: '', children: [],
-      textContent: '', appendChild(child) { this.children.push(child); }, append(...children) { this.children.push(...children); },
+      textContent: '', value: '', appendChild(child) { this.children.push(child); }, append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; }, remove() {}, focus() {},
       querySelector: () => element(), querySelectorAll: () => [],
-      setAttribute() {}, addEventListener() {} };
+      setAttribute() {}, removeAttribute() {}, addEventListener() {} };
   }
   const context = vm.createContext({
     window: { RIZZUME_API_BASE: options.base, PITCHR_API_BASE: options.legacyBase, location: {href: 'http://localhost/', origin: 'http://localhost'}, scrollTo() {}, AudioContext: function () {},
       addEventListener(name, callback) { listeners[name] = callback; } },
     document: {
+      body: {classList:{add(){},remove(){}}},
       addEventListener() {},
       hidden: false,
       getElementById(id) {
@@ -45,6 +47,7 @@ function app(options = {}) {
     URLSearchParams,
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout(id) { timers.delete(id); },
+    setInterval() { return 100; }, clearInterval() {},
     URLSearchParams,
     async fetch(url, init) {
       requests.push({ url, ...init });
@@ -61,6 +64,7 @@ function app(options = {}) {
     }
   });
   vm.runInContext(source, context);
+  vm.runInContext(messagesSource, context);
   vm.runInContext(editorSource, context);
   return { context, listeners, windowListeners, requests, timers, elements, document: context.document };
 }
@@ -72,7 +76,58 @@ const sampleProfile = {
   details: { fullBio: 'A profile', projects: [], github: 'https://github.com/ada', linkedin: '', email: 'ada@example.com' }
 };
 
-test('startup orders session, profile loading, matches loading, and dynamic team contact', async () => {
+test('removing a match waits for persistence, blocks duplicate requests and updates only that connection', async () => {
+  let complete;
+  const state = app({fetch:() => new Promise(resolve => { complete = resolve; })});
+  vm.runInContext(`backendAvailable=true; PROFILES=[${JSON.stringify(sampleProfile)}]; cardsState=[...PROFILES];
+    matchedProfiles=[PROFILES[0],{...PROFILES[0],id:'other'}];
+    chatConversations=[{profile:PROFILES[0],unreadCount:2},{profile:{id:'other'},unreadCount:1}];
+    chatProfileId=PROFILES[0].id; chatThreadReady=true;`,state.context);
+  const removal = vm.runInContext("removeSavedMatch('ada-lovelace')",state.context);
+  assert.equal(vm.runInContext('matchedProfiles.length',state.context),2);
+  assert.equal(await vm.runInContext("removeSavedMatch('ada-lovelace')",state.context),false);
+  assert.equal(state.requests.length,1);
+  assert.equal(state.requests[0].url,'/api/me/swipes/ada-lovelace');
+  assert.equal(state.requests[0].method,'PUT');
+  assert.deepEqual(JSON.parse(state.requests[0].body),{action:'pass'});
+  complete({ok:true,status:200,text:async () => '{"matched":false}'});
+  assert.equal(await removal,true);
+  assert.deepEqual(Array.from(vm.runInContext('matchedProfiles.map(p=>p.id)',state.context)),['other']);
+  assert.deepEqual(Array.from(vm.runInContext('chatConversations.map(c=>c.profile.id)',state.context)),['other']);
+  assert.equal(vm.runInContext('chatProfileId',state.context),null);
+  assert.equal(vm.runInContext('chatThreadReady',state.context),false);
+  assert.equal(vm.runInContext('cardsState.length',state.context),1);
+  assert.equal(state.elements.get('sidebarMessageCount').textContent,'1');
+});
+
+test('a failed match removal leaves the saved match and conversation available for retry', async () => {
+  const state = app({status:503,errorMessage:'Please try again.'});
+  vm.runInContext(`backendAvailable=true; matchedProfiles=[${JSON.stringify(sampleProfile)}];
+    chatConversations=[{profile:matchedProfiles[0],unreadCount:2}];`,state.context);
+  await assert.rejects(vm.runInContext("removeSavedMatch('ada-lovelace')",state.context),/Please try again/);
+  assert.equal(vm.runInContext('matchedProfiles.length',state.context),1);
+  assert.equal(vm.runInContext('chatConversations.length',state.context),1);
+  assert.equal(vm.runInContext('matchRemovalPending',state.context),false);
+});
+
+test('a match can be removed only after explicit confirmation, and cancelling sends no request', async () => {
+  const state=app();let modal;
+  state.context.window.RizzumeUI={icon:()=>'',dialog(id,html,onClose,options){
+    modal={el:{hidden:true,querySelectorAll:()=>[],setAttribute(){},removeAttribute(){}},
+      open(){this.el.hidden=false;},close(){if(options.canClose()){this.el.hidden=true;onClose();}}};return modal;
+  }};
+  vm.runInContext(`backendAvailable=true;matchedProfiles=[${JSON.stringify(sampleProfile)}];askToRemoveMatch('ada-lovelace');`,state.context);
+  assert.equal(modal.el.hidden,false);assert.equal(state.requests.length,0);
+  assert.equal(state.elements.get('removeMatchName').textContent,'Ada Lovelace');
+  modal.close();await state.elements.get('confirmRemoveMatch').onclick();
+  assert.equal(state.requests.length,0);
+  vm.runInContext("askToRemoveMatch('ada-lovelace')",state.context);
+  await state.elements.get('confirmRemoveMatch').onclick();
+  assert.equal(state.requests.length,1);assert.equal(modal.el.hidden,true);
+  assert.equal(vm.runInContext('matchedProfiles.length',state.context),0);
+});
+
+test('guest startup establishes a session before requesting workspace data', async () => {
   const state = app({ profiles: [sampleProfile], matches: [] });
   await state.listeners.DOMContentLoaded();
   assert.deepEqual(state.requests.slice(0, 4).map(request => [request.url, request.method]), [
@@ -81,6 +136,56 @@ test('startup orders session, profile loading, matches loading, and dynamic team
   assert.equal(vm.runInContext('PROFILES[0].id', state.context), 'ada-lovelace');
   assert.equal(vm.runInContext('teamEmail', state.context), 'team@example.com');
   assert.equal(state.requests.filter(request => request.url.endsWith('/session')).length, 1);
+});
+
+test('signed-in startup uses the validated account session without another session round trip', async () => {
+  const state = app({profiles:[sampleProfile]});
+  vm.runInContext("window.RizzumeAccount = {user:{profileId:'ada-lovelace'},requireLogin:async () => true}",state.context);
+  await state.listeners.DOMContentLoaded();
+  assert.deepEqual(state.requests.map(r => r.url),['/api/profiles','/api/me/matches','/api/team']);
+});
+
+test('roster and matches are requested concurrently rather than waiting for the roster response', async () => {
+  const pending = new Map();
+  const state = app({fetch:(url) => new Promise(resolve => pending.set(url,resolve))});
+  const loading = vm.runInContext('refreshProfilesAndMatches()',state.context);
+  assert.deepEqual([...pending.keys()],['/api/profiles','/api/me/matches']);
+  pending.get('/api/profiles')({ok:true,status:200,text:async () => JSON.stringify([sampleProfile])});
+  pending.get('/api/me/matches')({ok:true,status:200,text:async () => '[]'});
+  await loading;
+  assert.equal(vm.runInContext('PROFILES[0].name',state.context),'Ada Lovelace');
+});
+
+test('saving a card patches its cached data without resetting already swiped cards or match flags', () => {
+  const state = app();
+  vm.runInContext(`PROFILES=[${JSON.stringify(sampleProfile)}, {...${JSON.stringify(sampleProfile)},id:'another'}];
+    cardsState=[PROFILES[1]]; matchedProfiles=[{...PROFILES[0],isSuper:true}];
+    cacheEditedProfile({...PROFILES[0],name:'Updated name'});`,state.context);
+  assert.equal(vm.runInContext('PROFILES[0].name',state.context),'Updated name');
+  assert.deepEqual(Array.from(vm.runInContext('cardsState.map(p => p.id)',state.context)),['another']);
+  assert.equal(vm.runInContext('matchedProfiles[0].name',state.context),'Updated name');
+  assert.equal(vm.runInContext('matchedProfiles[0].isSuper',state.context),true);
+  assert.equal(state.requests.length,0);
+});
+
+test('structured project editing preserves pipes and paragraphs and validates list limits', () => {
+  const state = app();
+  const payload = vm.runInContext(String.raw`(() => {
+    const values={name:' Ada ',age:'28',verified:{checked:true},tags:' Java\n\n Design ',dealbreakers:' Helpful\nCurious ',fullBio:' My story ',email:'ada@example.com'};
+    const projects=[{title:'Search | discover',desc:'First paragraph.\nSecond paragraph.'},{title:'',desc:''}];
+    const form={elements:{namedItem(name){return name==='verified' ? values.verified : {value:values[name] || ''}}},
+      querySelectorAll(){return projects.map(p => ({querySelector(selector){return {value:selector==='[data-project-title]' ? p.title : p.desc}}}))}};
+    return profileEditorPayload(form);
+  })()`,state.context);
+  assert.equal(payload.name,'Ada');
+  assert.deepEqual(Array.from(payload.tags),['Java','Design']);
+  assert.equal(payload.details.projects.length,1);
+  assert.equal(payload.details.projects[0].title,'Search | discover');
+  assert.equal(payload.details.projects[0].desc,'First paragraph.\nSecond paragraph.');
+  state.context.payload = payload;
+  assert.equal(vm.runInContext('profileEditorValidation(payload)',state.context),'');
+  assert.match(vm.runInContext("profileEditorValidation({...payload,tags:Array(16).fill('Java')})",state.context),/15 skills/);
+  assert.match(vm.runInContext("profileEditorValidation({...payload,dealbreakers:['x'.repeat(301)]})",state.context),/300 characters/);
 });
 
 test('a separately hosted frontend can configure the API port', async () => {
@@ -175,6 +280,7 @@ test('message send failure exposes retry state without losing the draft', async 
   const state = app({ failure: true });
   await vm.runInContext(`
     chatProfileId = 'chee-reynaldo';
+    chatOpen = true; chatThreadReady = true;
     document.getElementById('chatComposer').value = 'Hello team';
     sendChatMessage();
   `, state.context);
@@ -253,15 +359,119 @@ test('late message responses cannot populate a different conversation', async ()
   assert.equal(state.elements.get('messageLog').children.length, 0);
 });
 
-test('admin writes prompt after a 403 and retry using the in-memory key', async () => {
+test('an empty inbox renders guidance rather than a blank conversation list', async () => {
+  const state=app({fetch:async()=>({ok:true,status:200,text:async()=>'[]'})});
+  vm.runInContext('chatOpen=true',state.context);
+  await vm.runInContext('loadConversations()',state.context);
+  assert.equal(vm.runInContext('chatListLoaded',state.context),true);
+  assert.equal(state.elements.get('conversationList').children[0].children[1].textContent,'A fresh start');
+  assert.match(state.elements.get('inboxWelcomeTitle').textContent,/conversation/);
+});
+
+test('inbox errors show a retry state and do not report an empty successful load', async () => {
+  const state=app({failure:true});
+  vm.runInContext('chatOpen=true',state.context);
+  await vm.runInContext('loadConversations()',state.context);
+  assert.equal(vm.runInContext('chatListLoaded',state.context),false);
+  assert.match(state.elements.get('conversationList').children[0].children[1].textContent,/reconnect/);
+});
+
+test('search and unread filters keep the inbox layout and distinguish no results', () => {
+  const state=app();
+  vm.runInContext(`chatListLoaded=true; chatConversations=[{profile:${JSON.stringify(sampleProfile)},unreadCount:2}]; renderConversations()`,state.context);
+  assert.equal(state.elements.get('conversationList').children.length,1);
+  state.elements.get('conversationSearch').value='nonexistent';
+  vm.runInContext('filterConversations()',state.context);
+  assert.equal(state.elements.get('conversationList').children[0].children[1].textContent,'No conversations found');
+  state.elements.get('conversationSearch').value='';
+  vm.runInContext('chatConversations[0].unreadCount=0; filterConversations("unread")',state.context);
+  assert.match(state.elements.get('conversationList').children[0].children[1].textContent,/caught up/);
+});
+
+test('closing and reopening the inbox ignores an old request', async () => {
+  const responses=[];
+  const state=app({fetch:()=>new Promise(resolve=>responses.push(resolve))});
+  vm.runInContext('chatOpen=true',state.context);
+  const old=vm.runInContext('loadConversations()',state.context);
+  vm.runInContext('closeChat(); chatOpen=true',state.context);
+  const current=vm.runInContext('loadConversations()',state.context);
+  responses[1]({ok:true,status:200,text:async()=>'[]'}); await current;
+  responses[0]({ok:true,status:200,text:async()=>JSON.stringify([{profile:sampleProfile,unreadCount:4}])}); await old;
+  assert.equal(vm.runInContext('chatConversations.length',state.context),0);
+});
+
+test('switching conversations preserves a separate in-memory draft for each connection', async () => {
+  const state=app({fetch:async()=>({ok:true,status:200,text:async()=>'[]'})});
+  vm.runInContext(`chatOpen=true; chatProfileId='first'; document.getElementById('chatComposer').value='First draft';`,state.context);
+  await vm.runInContext("openChatThread('second')",state.context);
+  state.elements.get('chatComposer').value='Second draft';
+  await vm.runInContext("openChatThread('first')",state.context);
+  assert.equal(state.elements.get('chatComposer').value,'First draft');
+  assert.equal(vm.runInContext("chatDrafts.get('second')",state.context),'Second draft');
+});
+
+test('a failed first thread load disables sending and provides retry without losing the draft', async () => {
+  const state=app({failure:true});
+  vm.runInContext("chatOpen=true;chatDrafts.set('first','Keep this draft');",state.context);
+  await vm.runInContext("openChatThread('first')",state.context);
+  assert.equal(state.elements.get('chatComposer').value,'Keep this draft');
+  assert.equal(state.elements.get('chatComposer').disabled,true);
+  assert.equal(state.elements.get('chatSendButton').disabled,true);
+  assert.equal(state.elements.get('threadLoadRetry').hidden,false);
+});
+
+test('a confirmed send clears its old draft when that thread was reopened during the request', async () => {
+  let complete;
+  const state=app({fetch:async (url,init)=> {
+    if (init.method==='POST' && url.endsWith('/messages')) return new Promise(resolve=>{complete=resolve});
+    return {ok:true,status:200,text:async()=>'[]'};
+  }});
+  vm.runInContext("chatOpen=true;chatProfileId='first';chatThreadReady=true;document.getElementById('chatComposer').value='Send this once'",state.context);
+  const sending=vm.runInContext('sendChatMessage()',state.context);
+  await vm.runInContext("openChatThread('second')",state.context);
+  await vm.runInContext("openChatThread('first')",state.context);
+  assert.equal(state.elements.get('chatComposer').value,'Send this once');
+  complete({ok:true,status:200,text:async()=>'{}'}); await sending;
+  assert.equal(state.elements.get('chatComposer').value,'');
+  assert.equal(vm.runInContext("chatDrafts.has('first')",state.context),false);
+});
+
+test('profile permission failures cannot fall back to browser admin-key overrides', async () => {
   const state = app({fetch: async (url, init) => {
     const allowed = init.headers['X-Admin-Key'] === 'entered-key';
     return {ok: allowed, status: allowed ? 201 : 403, text: async () => '{}', json: async () => ({message: 'Admin key required'})};
   }});
-  vm.runInContext("window.prompt = () => 'entered-key'", state.context);
-  await vm.runInContext("adminCall('/profiles', 'POST', {name: 'Test', age: 25})", state.context);
-  assert.equal(state.requests.length, 2);
-  assert.equal(state.requests[1].headers['X-Admin-Key'], 'entered-key');
+  vm.runInContext("window.prompt = () => {throw new Error('Must not prompt');}; adminKey = 'entered-key';", state.context);
+  await assert.rejects(vm.runInContext("adminCall('/profiles', 'POST', {name: 'Test', age: 25})", state.context), error => error.status === 403);
+  assert.equal(state.requests.length, 1);
+  assert.equal(state.requests[0].headers['X-Admin-Key'], undefined);
+});
+
+test('editing controls render for the owned profile only', () => {
+  const state = app();
+  vm.runInContext("backendAvailable = true; window.RizzumeAccount = {user:{profileId:'ada-lovelace'}};", state.context);
+  assert.equal(vm.runInContext("canEditProfile('ada-lovelace')", state.context),true);
+  assert.equal(vm.runInContext("canEditProfile('chee-reynaldo')", state.context),false);
+  vm.runInContext("window.RizzumeAccount.user = null", state.context);
+  assert.equal(vm.runInContext("canEditProfile('ada-lovelace')", state.context),false);
+});
+
+test('opening a foreign profile editor does not create an editor dialog', () => {
+  const state = app();
+  vm.runInContext("backendAvailable = true; window.RizzumeAccount = {user:{profileId:'mine'}};", state.context);
+  vm.runInContext(`openProfileEditor(${JSON.stringify(sampleProfile)})`,state.context);
+  assert.equal(vm.runInContext('editorOriginalProfile',state.context),null);
+  assert.equal(state.elements.has('profileEditor'),false);
+  assert.equal(state.requests.length,0);
+});
+
+test('the directory exposes edit and delete actions only on the owned card', () => {
+  const state=app();
+  vm.runInContext(`PROFILES = [${JSON.stringify(sampleProfile)}, {...${JSON.stringify(sampleProfile)},id:'foreign'}];
+    backendAvailable = true; window.RizzumeAccount = {user:{profileId:'ada-lovelace'}}; renderDirectory();`,state.context);
+  const cards=state.elements.get('directoryGrid').children;
+  assert.match(cards[0].innerHTML,/data-action="edit"/);assert.match(cards[0].innerHTML,/data-action="delete"/);
+  assert.doesNotMatch(cards[1].innerHTML,/data-action="edit"|data-action="delete"/);
 });
 
 test('multipart uploads keep their FormData body and let the browser set its boundary', async () => {

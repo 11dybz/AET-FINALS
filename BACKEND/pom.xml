@@ -107,6 +107,7 @@
 					<include>*.css</include>
 					<include>*.js</include>
 					<include>images/**</include>
+					<include>vendor/**</include>
 				</includes>
 			</resource>
 		</resources>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile editor test fixture</title><link rel="stylesheet" href="/profile-editor.css">
+<style>body {font-family:Arial,sans-serif;background:#f7f7fa;margin:30px} button {cursor:pointer} #fixtureResult {white-space:pre-wrap}</style></head>
+<body><h1>Profile editor test fixture</h1><p>Isolated sample data. Requests never reach the application API.</p>
+<button id="openExisting">Edit sample profile</button><button id="openNew">Create sample profile</button><button id="failNext">Fail next save</button><pre id="fixtureResult"></pre>
+<script>
+let stored = {id:'fixture-profile',name:'Alex Rivera',age:25,persona:'The creative builder',role:'Frontend Developer',location:'Manila, Philippines',matchPercentage:'Open to collaborate',bio:'Turning ideas into thoughtful digital experiences. Always up for building something great.',verified:true,tags:['JavaScript','UI design','React'],dealbreakers:['Curious by default','Teamwork comes first'],details:{fullBio:'I build accessible products with care and curiosity.',projects:[{title:'Campus Connect',desc:'A community app connecting students and their ideas.'}],github:'https://github.com/example',linkedin:'',email:'alex@example.com'},image:'/images/chee.jpg',images:[{id:1,url:'/images/chee.jpg'},{id:2,url:'/images/greg.jpg'}]};
+let PROFILES = [structuredClone(stored)], cardsState = [...PROFILES], matchedProfiles = [], currentlyViewingProfile = null, chatProfileId = null;
+let backendAvailable = true, editorDirty = false, editorImages = [], editorOriginalProfile = null, failNext = false;
+const calls = [];
+window.RizzumeAccount = {user:{name:'Alex Rivera',email:'alex@example.com',profileId:stored.id},async refresh(){this.user.profileId = stored.id;return this.user}};
+function canEditProfile(id){return id === window.RizzumeAccount.user.profileId}
+function safeImageUrl(url){return url || ''}
+function renderDirectory(){} function renderDeck(){} function updateDynamicCounts(){} function updateMatchesUI(){}
+function openProfileScreen(profile){currentlyViewingProfile = profile;showToast('Public profile',profile.name)}
+function showToast(title,message){document.getElementById('fixtureResult').textContent = title+': '+message+'\n'+JSON.stringify({calls,profile:stored,cards:cardsState},null,2)}
+async function apiCall(path,method='GET',body){
+  calls.push({path,method,body:body instanceof FormData ? 'multipart' : body});
+  if (failNext){failNext=false;throw new Error('Test connection interrupted. Try again.');}
+  if (method==='GET') return structuredClone(stored);
+  if (path.endsWith('/images/order')) {stored.images = body.imageIds.map(id=>stored.images.find(p=>p.id===id));stored.image=stored.images[0]?.url || '';return null;}
+  if (method==='DELETE') {stored.images=stored.images.filter(p=>!path.endsWith('/'+p.id));stored.image=stored.images[0]?.url || '';return null;}
+  if (path.endsWith('/images')) {stored.images.push({id:Date.now(),url:body.url || '/images/dave.jpg'});stored.image=stored.images[0].url;return stored.images;}
+  stored=method==='POST' ? {...body,id:'fixture-created',image:'',images:[]} : {...stored,...body};return structuredClone(stored);
+}
+</script><script src="/editor.js"></script><script>
+document.getElementById('openExisting').onclick=()=>openProfileEditor(PROFILES[0]);
+document.getElementById('openNew').onclick=()=>{window.RizzumeAccount.user.profileId=null;openProfileEditor()};
+document.getElementById('failNext').onclick=()=>{failNext=true};
+</script></body></html>

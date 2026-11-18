@@ -30,7 +30,7 @@
     toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
   }
   // Every modal has a focus trap, Escape handling and focus restoration.
-  function dialog(id, html, onClose) {
+  function dialog(id, html, onClose, options = {}) {
     const el = document.createElement('div'); el.id = id; el.className = 'rz-dialog'; el.hidden = true;
     el.innerHTML = html; const panel = el.firstElementChild;
     panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
@@ -38,8 +38,8 @@
     let previousFocus;
     const api = {
       el,
-      open() { previousFocus = document.activeElement; el.hidden = false; el.querySelector('button, input, select')?.focus(); },
-      close() { if (el.hidden) return; el.hidden = true; onClose?.(); previousFocus?.focus?.(); }
+      open() { previousFocus = document.activeElement; el.hidden = false; el.querySelector(options.initialFocus || 'button, input, select')?.focus(); },
+      close() { if (el.hidden || options.canClose?.() === false) return; el.hidden = true; onClose?.(); previousFocus?.focus?.(); }
     };
     el.querySelectorAll('[data-close]').forEach(button => { button.onclick = () => api.close(); });
     el.addEventListener('click', event => { if (event.target === el) api.close(); });

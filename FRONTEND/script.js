@@ -52,6 +52,7 @@ async function apiCall(path, method = 'GET', data, options = {}) {
       try { message = (await response.json()).message || message; } catch (e) {}
       const error = new Error(message);
       error.status = response.status;
+      if (response.status === 401 && window.RizzumeAccount?.user) window.RizzumeAccount.expired();
       throw error;
     }
     if (response.status === 204) return null;
@@ -79,13 +80,15 @@ async function fetchBackendProfiles() {
 }
 
 async function refreshProfilesAndMatches() {
-  const profiles = await apiCall('/profiles', 'GET', undefined, { admin: false });
+  const [profiles, matches] = await Promise.all([
+    apiCall('/profiles', 'GET', undefined, { admin: false }),
+    apiCall('/me/matches', 'GET', undefined, { admin: false })
+  ]);
   if (Array.isArray(profiles)) {
     PROFILES = profiles.map(profile => ({...profile,
       page: FALLBACK_PROFILES.find(member => member.id === profile.id)?.page}));
     cardsState = [...PROFILES];
   }
-  const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
   matchedProfiles = Array.isArray(matches) ? matches : [];
   backendAvailable = true;
   showBackendNotice(false);
@@ -100,7 +103,15 @@ function updateDynamicCounts() {
   ['teamCountHome', 'teamCountButton', 'teamCountFooter', 'directoryCount'].forEach(id => {
     const el = document.getElementById(id); if (el) el.textContent = String(PROFILES.length);
   });
-  document.querySelectorAll('[data-requires-backend]').forEach(button => { button.disabled = !backendAvailable; });
+  document.querySelectorAll('[data-requires-backend]').forEach(button => {
+    button.disabled = !backendAvailable;
+    button.hidden = !window.RizzumeAccount?.user || !!window.RizzumeAccount.user.profileId;
+    button.textContent = 'Create my profile';
+  });
+}
+
+function canEditProfile(profileId) {
+  return backendAvailable && !!window.RizzumeAccount?.user?.profileId && window.RizzumeAccount.user.profileId === profileId;
 }
 
 function showBackendNotice(readOnly) {
@@ -236,6 +247,7 @@ const FALLBACK_PROFILES = [
 let PROFILES = FALLBACK_PROFILES;
 let cardsState = [...PROFILES];
 let matchedProfiles = [];
+let matchRemovalPending = false, matchRemovalTarget = null, matchRemovalDialog;
 let backendAvailable = false;
 let adminKey = ''; // In-memory only; never persisted to localStorage, cookies, or sessionStorage.
 let teamEmail = 'team.leads@example.com';
@@ -393,13 +405,13 @@ function renderDirectory() {
           ${(profile.tags || []).slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${escapeHtml(tag)}</span>`).join('')}
         </div>
       </div>
-      <div class="grid grid-cols-1 ${backendAvailable ? 'sm:grid-cols-3' : ''} gap-2">
+      <div class="grid grid-cols-1 ${canEditProfile(profile.id) ? 'sm:grid-cols-3' : ''} gap-2">
         <button type="button" data-action="view" class="directory-view w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold">View Full Profile</button>
-        ${backendAvailable ? `<button type="button" data-action="edit" class="w-full py-2.5 rounded-xl bg-pink-50 text-tinder-pink text-xs font-bold">Edit</button><button type="button" data-action="delete" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">Delete</button>` : ''}
+        ${canEditProfile(profile.id) ? `<button type="button" data-action="edit" class="w-full py-2.5 rounded-xl bg-pink-50 text-tinder-pink text-xs font-bold">Edit my profile</button><button type="button" data-action="delete" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">Delete</button>` : ''}
       </div>`;
     // Attach the selected profile through a closure, not an inline onclick attribute.
     card.querySelector('[data-action="view"]').addEventListener('click', () => openProfileScreen(profile));
-    if (backendAvailable) {
+    if (canEditProfile(profile.id)) {
       card.querySelector('[data-action="edit"]').addEventListener('click', () => openProfileEditor(profile));
       card.querySelector('[data-action="delete"]').addEventListener('click', () => confirmDeleteProfile(profile));
     }
@@ -651,7 +663,7 @@ function triggerSwipeAction(direction) {
 
 async function finalizeSwipe(direction) {
   if (!backendAvailable) return showToast('Read-only mode', 'Connect to the backend and reload before saving a swipe.');
-  if (!activeCardElem || cardsState.length === 0 || isSwiping) return;
+  if (!activeCardElem || cardsState.length === 0 || isSwiping || matchRemovalPending) return;
   isSwiping = true;
   hasSwipedOrMoved = true;
   isDragging = false;
@@ -800,7 +812,7 @@ function openProfileScreen(profile) {
     pageLink.className = 'text-xs font-bold text-tinder-pink hover:underline';
     actions.appendChild(pageLink);
   }
-  if (backendAvailable) {
+  if (canEditProfile(profile.id)) {
     const edit = document.createElement('button');
     edit.type = 'button'; edit.textContent = 'Edit';
     edit.className = 'px-3 py-2 rounded-xl bg-pink-50 text-tinder-pink text-xs font-bold';
@@ -971,7 +983,7 @@ function openLightbox(images, index) {
     modal = document.createElement('div');
     modal.id = 'profileLightbox';
     modal.className = 'profile-lightbox hidden';
-    modal.innerHTML = '<button type="button" data-close aria-label="Close image viewer" class="lightbox-close">×</button><button type="button" data-prev aria-label="Previous image" class="lightbox-arrow lightbox-prev">‹</button><img id="lightboxImage" alt="Expanded profile image"><button type="button" data-next aria-label="Next image" class="lightbox-arrow lightbox-next">›</button><p id="lightboxCounter" class="lightbox-counter"></p>';
+    modal.innerHTML = '<button type="button" data-close aria-label="Close image viewer" class="lightbox-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12 M6 18 18 6"/></svg></button><button type="button" data-prev aria-label="Previous image" class="lightbox-arrow lightbox-prev">‹</button><img id="lightboxImage" alt="Expanded profile image"><button type="button" data-next aria-label="Next image" class="lightbox-arrow lightbox-next">›</button><p id="lightboxCounter" class="lightbox-counter"></p>';
     modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('[data-close]')) closeLightbox(); });
     modal.querySelector('[data-prev]').addEventListener('click', () => moveLightbox(-1));
     modal.querySelector('[data-next]').addEventListener('click', () => moveLightbox(1));
@@ -1027,250 +1039,7 @@ function openTopMemberDetail() {
   }
 }
 
-async function openChat(profileId) {
-  if (!backendAvailable) return showToast('Messages unavailable', 'Connect to the backend and reload.');
-  if (profileId && !matchedProfiles.some(profile => profile.id === profileId)) {
-    return showToast('Match first', 'Like this profile before sending a message.');
-  }
-  chatLastFocused = document.activeElement;
-  chatOpen = true;
-  chatProfileId = profileId || null;
-  chatGeneration++;
-  document.getElementById('threadView').classList.add('hidden');
-  document.getElementById('threadView').classList.remove('flex');
-  document.getElementById('conversationList').classList.remove('hidden');
-  document.getElementById('chatTitle').textContent = 'Messages';
-  const sheet = document.getElementById('chatSheet');
-  sheet.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
-  sheet.classList.add('flex');
-  lucide.createIcons();
-  await loadConversations();
-  if (!chatOpen) return;
-  if (chatProfileId) await openChatThread(chatProfileId);
-  startChatPolling();
-  const composer = document.getElementById('chatComposer');
-  if (chatProfileId) composer.focus();
-  else document.getElementById('chatBackButton').focus();
-}
-
-function closeChat() {
-  chatGeneration++;
-  chatOpen = false;
-  chatProfileId = null;
-  stopChatPolling();
-  const sheet = document.getElementById('chatSheet');
-  sheet.classList.add('hidden', 'opacity-0', 'pointer-events-none');
-  sheet.classList.remove('flex');
-  if (chatLastFocused && chatLastFocused.focus) chatLastFocused.focus();
-}
-
-async function openChatForProfile(profileId) {
-  toggleMatchesDrawer(false);
-  await openChat(profileId);
-}
-
-async function loadConversations() {
-  if (!chatOpen) return;
-  try {
-    const conversations = await apiCall('/me/conversations');
-    if (!chatOpen) return;
-    const list = document.getElementById('conversationList');
-    list.replaceChildren();
-    let unreadTotal = 0;
-    for (const conversation of conversations) {
-      unreadTotal += Number(conversation.unreadCount || 0);
-      const profile = conversation.profile;
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'w-full min-h-11 flex items-center gap-3 p-3 rounded-2xl border border-zinc-100 bg-zinc-50 text-left focus:outline-none focus:ring-2 focus:ring-tinder-pink';
-      row.addEventListener('click', () => openChatThread(profile.id));
-      const img = document.createElement('img');
-      img.src = safeImageUrl(profile.image);
-      img.alt = '';
-      img.className = 'w-12 h-12 rounded-xl object-cover';
-      const copy = document.createElement('div');
-      copy.className = 'flex-1 min-w-0';
-      const name = document.createElement('p');
-      name.className = 'font-extrabold text-xs text-zinc-900 truncate';
-      name.textContent = profile.name;
-      const preview = document.createElement('p');
-      preview.className = 'text-[11px] text-zinc-500 truncate';
-      preview.textContent = conversation.lastMessage ? conversation.lastMessage.body : 'Start a conversation';
-      copy.append(name, preview);
-      const badge = document.createElement('span');
-      badge.className = 'hidden';
-      if (conversation.unreadCount > 0) {
-        badge.className = 'min-w-5 h-5 px-1.5 rounded-full bg-tinder-pink text-white text-[10px] font-black flex items-center justify-center';
-        badge.textContent = String(conversation.unreadCount);
-      }
-      row.append(img, copy, badge);
-      list.appendChild(row);
-    }
-    const badge = document.getElementById('messagesUnreadBadge');
-    badge.textContent = unreadTotal ? String(unreadTotal) : '';
-    badge.classList.toggle('hidden', unreadTotal === 0);
-  } catch (err) {
-    showToast('Messages unavailable', 'Try again in a moment');
-  }
-}
-
-async function openChatThread(profileId) {
-  chatGeneration++;
-  chatProfileId = profileId;
-  chatAfterId = 0;
-  chatFailedPayload = null;
-  document.getElementById('chatComposer').value = '';
-  document.getElementById('chatError').classList.add('hidden');
-  const profile = matchedProfiles.find(p => p.id === profileId) || PROFILES.find(p => p.id === profileId);
-  chatProfileName = profile ? profile.name : profileId;
-  document.getElementById('chatTitle').textContent = chatProfileName;
-  document.getElementById('chatSubtitle').textContent = 'Conversation';
-  document.getElementById('conversationList').classList.add('hidden');
-  const thread = document.getElementById('threadView');
-  thread.classList.remove('hidden');
-  thread.classList.add('flex');
-  document.getElementById('messageLog').replaceChildren();
-  document.getElementById('messageLog').dataset.lastDay = '';
-  await pollChatMessages(true);
-  try { await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`, 'POST'); } catch (e) {}
-  await loadConversations();
-}
-
-async function pollChatMessages(initial = false) {
-  if (!chatOpen || !chatProfileId || document.hidden) return;
-  const profileId = chatProfileId, generation = chatGeneration;
-  if (chatPolls.has(generation)) return;
-  chatPolls.add(generation);
-  try {
-    const log = document.getElementById('messageLog');
-    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-    const messages = await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/messages?afterId=${chatAfterId}`, 'GET', undefined, {admin: false});
-    if (!chatOpen || generation !== chatGeneration) return;
-    if (messages.length) {
-      let lastDay = log.dataset.lastDay || '';
-      for (const message of messages) {
-        if (log.querySelector(`[data-message-id="${Number(message.id)}"]`)) continue;
-        const day = new Date(message.createdAt).toLocaleDateString();
-        if (day !== lastDay) {
-          const separator = document.createElement('div');
-          separator.className = 'text-center text-[10px] font-bold text-zinc-400 my-2';
-          separator.textContent = day;
-          log.appendChild(separator);
-          lastDay = day;
-          log.dataset.lastDay = day;
-        }
-        const bubble = document.createElement('div');
-        bubble.className = `max-w-[82%] rounded-2xl px-3 py-2 ${message.sender === 'visitor' ? 'ml-auto text-white bg-gradient-to-r from-tinder-pink to-tinder-orange' : 'mr-auto bg-white border border-zinc-200 text-zinc-900'}`;
-        bubble.dataset.messageId = String(message.id);
-        const body = document.createElement('p');
-        body.className = 'text-sm whitespace-pre-wrap break-words';
-        if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(body, message.body);
-        else body.textContent = message.body;
-        const time = document.createElement('time');
-        time.className = 'block mt-1 text-[9px] opacity-70';
-        time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        bubble.append(body, time);
-        log.appendChild(bubble);
-        chatAfterId = Math.max(chatAfterId, Number(message.id));
-      }
-      if (initial || nearBottom) scrollChatToBottom(true);
-      else document.getElementById('newMessagesPill').classList.remove('hidden');
-      if (messages.some(message => message.sender === 'member')) {
-        await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`, 'POST', undefined, {admin: false});
-        if (chatOpen && generation === chatGeneration) await loadConversations();
-      }
-    }
-  } catch (err) {
-    if (initial && chatOpen && generation === chatGeneration) showToast('Messages unavailable', err.message);
-  } finally { chatPolls.delete(generation); }
-}
-
-function scrollChatToBottom(force) {
-  const log = document.getElementById('messageLog');
-  log.scrollTop = log.scrollHeight;
-  document.getElementById('newMessagesPill').classList.add('hidden');
-}
-
-function startChatPolling() {
-  stopChatPolling();
-  chatPollTimer = setInterval(() => {
-    if (chatOpen && !document.hidden) pollChatMessages(false);
-  }, 4000);
-}
-function stopChatPolling() {
-  if (chatPollTimer) clearInterval(chatPollTimer);
-  chatPollTimer = null;
-}
-document.addEventListener('visibilitychange', () => {
-  if (chatOpen && !document.hidden) pollChatMessages(false);
-});
-
-function chatComposerInput() {
-  const composer = document.getElementById('chatComposer');
-  composer.style.height = 'auto';
-  composer.style.height = Math.min(composer.scrollHeight, 128) + 'px';
-  document.getElementById('chatCharacterCount').textContent = String(composer.value.length);
-}
-function chatComposerKeydown(event) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    sendChatMessage();
-  }
-}
-async function sendChatMessage() {
-  if (!chatProfileId || chatSending) return;
-  const composer = document.getElementById('chatComposer');
-  const sendButton = document.getElementById('chatSendButton');
-  const body = composer.value.trim();
-  if (!body) return;
-  if (body.length > 1000) return showToast('Message too long', 'Use 1000 characters or fewer.');
-  const profileId = chatProfileId, generation = chatGeneration;
-  chatSending = true;
-  sendButton.disabled = true;
-  composer.disabled = true;
-  document.getElementById('chatError').classList.add('hidden');
-  const optimistic = appendOptimisticMessage(body);
-  try {
-    await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/messages`, 'POST', { body }, {admin: false});
-    optimistic.remove();
-    if (generation !== chatGeneration) return;
-    chatFailedPayload = null;
-    composer.value = '';
-    chatComposerInput();
-    await pollChatMessages();
-  } catch (err) {
-    optimistic.remove();
-    if (generation !== chatGeneration) return;
-    chatFailedPayload = body;
-    document.getElementById('chatErrorText').textContent = err.message || 'Could not send message';
-    document.getElementById('chatError').classList.remove('hidden');
-  } finally {
-    chatSending = false;
-    sendButton.disabled = false;
-    composer.disabled = false;
-  }
-}
-function appendOptimisticMessage(body) {
-  const log = document.getElementById('messageLog');
-  const bubble = document.createElement('div');
-  bubble.className = 'max-w-[82%] ml-auto rounded-2xl px-3 py-2 text-white bg-gradient-to-r from-tinder-pink to-tinder-orange';
-  const text = document.createElement('p');
-  text.className = 'text-sm whitespace-pre-wrap break-words';
-  text.textContent = body;
-  bubble.appendChild(text);
-  log.appendChild(bubble);
-  scrollChatToBottom(true);
-  return bubble;
-}
-async function retryChatSend() {
-  if (!chatFailedPayload) return;
-  document.getElementById('chatComposer').value = chatFailedPayload;
-  await sendChatMessage();
-}
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && chatOpen) closeChat();
-});
+// Messaging workspace behavior lives in messages.js.
 
 // MATCHES DRAWER
 function toggleMatchesDrawer(show) {
@@ -1286,7 +1055,64 @@ function toggleMatchesDrawer(show) {
   }
 }
 
-// Render the visitor's server-backed matches safely and attach click/contact actions without inline data handlers.
+// Persist removal before changing any local matches or conversations.
+async function removeSavedMatch(profileId) {
+  if (matchRemovalPending) return false;
+  if (!backendAvailable) throw new Error('Connect to Rizzume and try again.');
+  if (isSwiping) throw new Error('Wait for your current swipe to finish, then try again.');
+  if (!matchedProfiles.some(profile => profile.id === profileId)) return false;
+  matchRemovalPending = true;
+  try {
+    await apiCall(`/me/swipes/${encodeURIComponent(profileId)}`, 'PUT', {action:'pass'}, {admin:false});
+    matchedProfiles = matchedProfiles.filter(profile => profile.id !== profileId);
+    if (typeof syncRemovedMatch === 'function') syncRemovedMatch(profileId);
+    updateMatchesUI();
+    return true;
+  } finally { matchRemovalPending = false; }
+}
+
+function askToRemoveMatch(profileId) {
+  if (matchRemovalPending || (matchRemovalDialog && !matchRemovalDialog.el.hidden)) return;
+  const profile = matchedProfiles.find(item => item.id === profileId);
+  if (!profile) return;
+  if (!matchRemovalDialog) {
+    const {dialog, icon} = window.RizzumeUI;
+    matchRemovalDialog = dialog('removeMatchConfirmation', `<section class="rz-dialog-panel rz-remove-match-panel" aria-describedby="removeMatchDescription">
+      <div class="rz-dialog-header"><h2>Remove this match?</h2><button type="button" data-close class="rz-icon-button" aria-label="Close remove match confirmation">${icon('close')}</button></div>
+      <p id="removeMatchDescription" class="rz-remove-match-description">Remove <strong id="removeMatchName"></strong> from your matches?</p>
+      <p class="rz-help">This connection will leave your matches and inbox. Your existing messages will stay saved. You can like their profile again to reconnect.</p>
+      <p id="removeMatchError" class="rz-remove-match-error" role="alert" tabindex="-1" hidden></p>
+      <div class="rz-dialog-actions"><button id="cancelRemoveMatch" type="button" data-close class="rz-outline-button">Cancel</button><button id="confirmRemoveMatch" type="button" class="rz-primary">Remove match</button></div>
+    </section>`, () => { matchRemovalTarget = null; },
+      {initialFocus:'#cancelRemoveMatch', canClose:() => !matchRemovalPending});
+    document.getElementById('confirmRemoveMatch').onclick = async () => {
+      if (matchRemovalPending || !matchRemovalTarget) return;
+      const target = matchRemovalTarget, confirm = document.getElementById('confirmRemoveMatch');
+      const error = document.getElementById('removeMatchError'); error.hidden = true;
+      const buttons = [...matchRemovalDialog.el.querySelectorAll('button')];
+      buttons.forEach(button => { button.disabled = true; });
+      matchRemovalDialog.el.setAttribute('aria-busy','true'); confirm.textContent = 'Removing…';
+      try {
+        const removed = await removeSavedMatch(target.id);
+        matchRemovalDialog.close();
+        if (removed) showToast('Match removed', 'You can like this profile again to reconnect.');
+        (document.querySelector('#matchesList [data-view]') || document.querySelector('#matchesDrawer button'))?.focus();
+      } catch (failure) {
+        error.textContent = failure.message || 'Could not remove this match. Please try again.';
+        error.hidden = false; error.focus();
+      } finally {
+        buttons.forEach(button => { button.disabled = false; });
+        matchRemovalDialog.el.removeAttribute('aria-busy'); confirm.textContent = 'Remove match';
+      }
+    };
+  }
+  matchRemovalTarget = profile;
+  document.getElementById('removeMatchName').textContent = profile.name;
+  document.getElementById('removeMatchError').hidden = true;
+  matchRemovalDialog.open();
+}
+
+// Render saved matches with separate, keyboard-accessible view, contact and remove actions.
 function updateMatchesUI() {
   window.RizzumeExperience?.refresh();
   const count = matchedProfiles.length;
@@ -1298,28 +1124,25 @@ function updateMatchesUI() {
   } else {
     matchedProfiles.forEach(item => {
       const row = document.createElement('div');
-      row.className = "flex items-center gap-3 p-3 bg-zinc-50 hover:bg-pink-50/50 rounded-2xl border border-zinc-100 transition-colors cursor-pointer";
-      row.onclick = () => {
-        toggleMatchesDrawer(false);
-        openProfileScreen(item);
-      };
+      row.className = 'rz-match-row';
       row.innerHTML = `
-        <img src="${escapeHtml(safeImageUrl(item.image))}" class="w-12 h-12 rounded-xl object-cover" />
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1.5">
-            <h4 class="font-extrabold text-xs text-zinc-900 truncate">${escapeHtml(item.name)}</h4>
-            ${item.isSuper ? `<span class="text-[9px] bg-sky-100 text-sky-600 px-1.5 py-0.2 rounded font-black">SUPER</span>` : ''}
-          </div>
-          <p class="text-[11px] text-zinc-500 truncate">${escapeHtml(item.role)}</p>
-        </div>
-        <button type="button" data-contact class="px-3 py-1.5 rounded-xl bg-tinder-pink text-white text-xs font-bold hover:bg-tinder-coral transition-colors flex items-center gap-1">
-          <i data-lucide="mail" class="w-3.5 h-3.5"></i>
-          <span>Ping</span>
+        <button type="button" data-view class="rz-match-open" aria-label="View ${escapeHtml(item.name)}">
+          <img src="${escapeHtml(safeImageUrl(item.image))}" alt="" />
+          <span class="rz-match-copy"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.role)}</span>
+          ${item.isSuper ? '<span class="rz-match-super">Super liked</span>' : ''}</span>
         </button>
+        <div class="rz-match-actions">
+          <button type="button" data-contact class="rz-match-contact"><i data-lucide="mail" aria-hidden="true"></i>Ping</button>
+          <button type="button" data-remove class="rz-match-remove" aria-label="Remove ${escapeHtml(item.name)} from matches"><i data-lucide="heart-off" aria-hidden="true"></i>Remove</button>
+        </div>
       `;
+      row.querySelector('[data-view]').addEventListener('click', () => {
+        toggleMatchesDrawer(false); openProfileScreen(item);
+      });
       row.querySelector('[data-contact]').addEventListener('click', event => {
         event.stopPropagation(); directContactProfile(item.details?.email || '');
       });
+      row.querySelector('[data-remove]').addEventListener('click', () => askToRemoveMatch(item.id));
       list.appendChild(row);
     });
   }
@@ -1388,8 +1211,11 @@ function copyTeamContact() {
   showToast("Copied to Clipboard!", email);
 }
 
-// Startup is strictly session -> profiles -> matches. The legacy array is only a read-only fallback.
+// Authenticate first, then load independent workspace data concurrently.
 window.addEventListener('DOMContentLoaded', async () => {
+  document.body?.classList.add('workspace-loading');
+  if (window.RizzumeAccount && !await window.RizzumeAccount.requireLogin()) return;
+  PROFILES = []; cardsState = []; // Show a stable loading skeleton before the real roster arrives.
   lucide.createIcons();
   updateDynamicCounts();
   showBackendNotice(false);
@@ -1399,12 +1225,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   startMode(initialMode);
 
   try {
-    await apiCall('/session', 'POST', undefined, { admin: false });
-    await refreshProfilesAndMatches();
-    try {
-      const team = await apiCall('/team', 'GET', undefined, { admin: false });
-      if (team?.email) teamEmail = team.email;
-    } catch (error) { console.error('Could not load team contact:', error); }
+    if (!window.RizzumeAccount?.user) await apiCall('/session', 'POST', undefined, { admin: false });
+    await Promise.all([
+      refreshProfilesAndMatches(),
+      apiCall('/team', 'GET', undefined, { admin: false }).then(team => {
+        if (team?.email) teamEmail = team.email;
+      }).catch(error => console.error('Could not load team contact:', error))
+    ]);
   } catch (error) {
     console.error('Backend initialization failed:', error);
     PROFILES = FALLBACK_PROFILES;
@@ -1420,6 +1247,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Check if opened via QR link (e.g., ?profile=fontelar-dave)
   renderDirectory();
   renderDeck();
+  document.body?.classList.remove('workspace-loading');
   window.RizzumeExperience?.ready();
   const urlParams = typeof URLSearchParams === 'undefined'
     ? { get: () => null }

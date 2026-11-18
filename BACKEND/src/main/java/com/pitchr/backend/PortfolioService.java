@@ -35,12 +35,13 @@ public class PortfolioService {
     private final ProfileImageBlobRepository imageBlobs;
     private final MessageRepository messages;
     private final CollaborationService collaboration;
+    private final AccountService accounts;
     private final int sessionDays;
     private final Map<String, Deque<Instant>> sendWindows = new ConcurrentHashMap<>();
 
     public PortfolioService(ProfileRepository profiles, SessionRepository sessions, SwipeRepository swipes,
                             ProfileImageRepository images, ProfileImageBlobRepository imageBlobs,
-                            MessageRepository messages, CollaborationService collaboration, @Value("${pitchr.session-days}") int sessionDays) {
+                            MessageRepository messages, CollaborationService collaboration, AccountService accounts, @Value("${pitchr.session-days}") int sessionDays) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.swipes = swipes;
@@ -48,11 +49,18 @@ public class PortfolioService {
         this.imageBlobs = imageBlobs;
         this.messages = messages;
         this.collaboration = collaboration;
+        this.accounts = accounts;
         this.sessionDays = sessionDays;
     }
 
     public List<ProfileResponse> profiles() {
-        return profiles.findAllByOrderByDisplayOrderAsc().stream().map(profile -> response(profile, null)).toList();
+        List<Profile> roster = profiles.findAllByOrderByDisplayOrderAsc();
+        if (roster.isEmpty()) return List.of();
+        // Fetch gallery metadata once; the three ordered detail collections are batch loaded.
+        // Uploaded bytes remain in the separate blob repository and are never read here.
+        Map<String, List<ProfileImage>> galleries = galleries(roster.stream().map(p -> p.id).toList());
+        return roster.stream().map(profile -> ProfileResponse.from(profile, null,
+            galleries.getOrDefault(profile.id, List.of()))).toList();
     }
 
     public ProfileResponse profile(String id) { return response(requireProfile(id), null); }
@@ -65,6 +73,20 @@ public class PortfolioService {
             .mapToInt(existing -> existing.displayOrder).max().orElse(-1) + 1;
         applyEditableFields(profile, request);
         return response(profiles.saveAndFlush(profile), null);
+    }
+
+    @Transactional
+    public ProfileResponse createOwnProfile(String token, ProfileRequest request) {
+        Account owner = accounts.lockForProfileCreation(token);
+        ProfileResponse profile = createProfile(request);
+        owner.profileId = profile.id();
+        return profile;
+    }
+
+    public ProfileResponse ownProfile(String token) {
+        Account owner = accounts.requireAccount(token);
+        if (owner.profileId == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Create your profile to get started.");
+        return profile(owner.profileId);
     }
 
     @Transactional
@@ -158,7 +180,7 @@ public class PortfolioService {
     @Transactional
     public VisitorSession resumeSession(String token) {
         if (token != null) {
-            var existing = sessions.findById(token).filter(s -> s.expiresAt.isAfter(Instant.now()));
+            var existing = accounts.resolve(token, false);
             if (existing.isPresent()) return existing.get();
         }
         return sessions.save(new VisitorSession(UUID.randomUUID().toString(),
@@ -167,9 +189,11 @@ public class PortfolioService {
 
     public List<ProfileResponse> matches(String token) {
         VisitorSession session = requireSession(token, false);
-        return swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
-            .filter(s -> s.action != Swipe.Action.pass)
-            .map(s -> response(s.profile, s.action == Swipe.Action.super_like)).toList();
+        List<Swipe> matched = swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
+            .filter(s -> s.action != Swipe.Action.pass).toList();
+        Map<String, List<ProfileImage>> galleries = galleries(matched.stream().map(s -> s.profile.id).toList());
+        return matched.stream().map(s -> ProfileResponse.from(s.profile, s.action == Swipe.Action.super_like,
+            galleries.getOrDefault(s.profile.id, List.of()))).toList();
     }
 
     @Transactional
@@ -315,6 +339,12 @@ public class PortfolioService {
         images.saveAll(ordered);
     }
 
+    private Map<String, List<ProfileImage>> galleries(List<String> ids) {
+        if (ids.isEmpty()) return Map.of();
+        return images.findByProfileIdInOrderByProfileIdAscDisplayOrderAscIdAsc(ids).stream()
+            .collect(Collectors.groupingBy(image -> image.profileId));
+    }
+
     private ProfileResponse response(Profile profile, Boolean isSuper) {
         return ProfileResponse.from(profile, isSuper, images.findByProfileIdOrderByDisplayOrderAscIdAsc(profile.id));
     }
@@ -402,8 +432,7 @@ public class PortfolioService {
 
     private VisitorSession requireSession(String token, boolean lock) {
         if (token == null || token.isBlank()) throw unauthorized();
-        return (lock ? sessions.findForUpdate(token) : sessions.findById(token))
-            .filter(s -> s.expiresAt.isAfter(Instant.now())).orElseThrow(this::unauthorized);
+        return accounts.resolve(token, lock).orElseThrow(this::unauthorized);
     }
 
     private ResponseStatusException unauthorized() {

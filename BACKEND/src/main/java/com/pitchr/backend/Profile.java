@@ -23,18 +23,21 @@ public class Profile {
     String email;
     int displayOrder;
 
+    @org.hibernate.annotations.BatchSize(size = 50)
     @ElementCollection
     @CollectionTable(name = "profile_skills", joinColumns = @JoinColumn(name = "profile_id"))
     @OrderColumn(name = "display_order")
     @Column(name = "skill")
     List<String> tags = new ArrayList<>();
 
+    @org.hibernate.annotations.BatchSize(size = 50)
     @ElementCollection
     @CollectionTable(name = "profile_highlights", joinColumns = @JoinColumn(name = "profile_id"))
     @OrderColumn(name = "display_order")
     @Column(name = "highlight", length = 1000)
     List<String> dealbreakers = new ArrayList<>();
 
+    @org.hibernate.annotations.BatchSize(size = 50)
     @ElementCollection
     @CollectionTable(name = "projects", joinColumns = @JoinColumn(name = "profile_id"))
     @OrderColumn(name = "display_order")
