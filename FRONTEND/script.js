@@ -2,6 +2,13 @@
 // can set window.RIZZUME_API_BASE before loading this script.
 const API_BASE = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
 
+// Preload Spooderman image for instant hover
+(function preloadSpooderman() {
+  const img = new Image();
+  img.src = 'images/spooderman.webp';
+  img.decoding = 'async';
+})();
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -480,10 +487,10 @@ function renderDeck() {
   for (let i = Math.min(cardsState.length, 3) - 1; i >= 0; i--) {
     const profile = cardsState[i];
     const isTopCard = i === 0;
-    const card = document.createElement('div');
     const scale = 1 - (i * 0.04);
     const translateY = i * 10;
     const zIndex = 30 - i;
+    const card = document.createElement('div');
     card.className = `swipe-card absolute inset-0 w-full h-full rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden flex flex-col justify-between select-none ${isTopCard ? 'cursor-grab active:cursor-grabbing card-transition' : ''}`;
     card.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
     card.style.zIndex = zIndex;
@@ -494,7 +501,8 @@ function renderDeck() {
     } else card.setAttribute('aria-hidden', 'true');
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
-        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover" />
+        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover spooderman-original" />
+        <img src="images/spooderman.webp" alt="" class="spooderman-hover absolute inset-0 w-full h-full object-contain opacity-0 transition-opacity duration-200 ease-out pointer-events-none" aria-hidden="true" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">HIRE / MATCH</div>
         <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity">PASS</div>

@@ -8,6 +8,57 @@
   -webkit-user-select: none;
 }
 
+/* ===== SPOODERMAN HOVER EASTER EGG ===== */
+/* Only activate on hover-capable devices (non-touch) */
+@media (hover: hover) and (pointer: fine) {
+  .swipe-card .spooderman-hover {
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+  }
+
+  .swipe-card:hover .spooderman-hover {
+    opacity: 1;
+  }
+
+  .swipe-card:hover .spooderman-original {
+    opacity: 0;
+  }
+
+  .swipe-card .spooderman-original {
+    transition: opacity 200ms ease-out;
+  }
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .swipe-card .spooderman-hover,
+  .swipe-card .spooderman-original {
+    transition: none !important;
+  }
+  
+  .swipe-card:hover .spooderman-hover {
+    opacity: 1;
+  }
+  
+  .swipe-card:hover .spooderman-original {
+    opacity: 0;
+  }
+}
+
+/* Ensure the image container maintains dimensions during transition */
+.swipe-card > div:first-child {
+  position: relative;
+}
+
+.swipe-card .spooderman-hover {
+  /* Keep Spooderman centered and contained within the card bounds */
+  object-fit: cover;
+  /* Prevent any layout shift */
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 @keyframes pulse-subtle {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.06); }
