@@ -27,8 +27,8 @@
       return (url.pathname === '/' ? '/index.html' : url.pathname) + url.search + url.hash;
     } catch (_) { return 'index.html'; }
   }
-  function signInUrl(nextOverride) {
-    const target = nextOverride ? destination(nextOverride) : destination(window.location.href);
+ function signInUrl(nextOverride) {
+    const target = destination(nextOverride || 'index.html');
     return 'login.html?next=' + encodeURIComponent(target);
   }
   function expired() {

@@ -49,7 +49,7 @@ function handleGuardedClick(action, nextUrl = 'index.html') {
   action();
 }
 
-function openSubscriptionHook(nextUrl = 'index.html') {
+function openSubscriptionHook() {
   const modal = document.getElementById('subscriptionHookModal');
   const box = document.getElementById('subscriptionHookBox');
   const step1 = document.getElementById('paywallStepOne');
@@ -57,10 +57,11 @@ function openSubscriptionHook(nextUrl = 'index.html') {
   const loginLink = document.getElementById('prankLoginLink');
   if (!modal || !box) return;
 
+  try { sessionStorage.setItem('rizzumeMode', 'swipe'); } catch (_) {}
   step1.classList.remove('hidden');
   step2.classList.add('hidden');
   if (loginLink) {
-    loginLink.href = window.RizzumeAccount?.signInUrl ? window.RizzumeAccount.signInUrl(nextUrl) : 'login.html';
+    loginLink.href = window.RizzumeAccount?.signInUrl ? window.RizzumeAccount.signInUrl('index.html') : 'login.html?next=%2Findex.html';
   }
 
   modal.classList.remove('opacity-0', 'pointer-events-none');
