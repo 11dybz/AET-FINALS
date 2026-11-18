@@ -11,6 +11,34 @@ cd BACKEND
 
 Open `http://localhost:8080/`. The app creates `BACKEND/data/pitchr.mv.db` when launched from `BACKEND`; use the same working directory to reuse the database.
 
+### Discovery, video calls, maps, and notifications
+
+The frontend opens into a Tinder-inspired discovery deck, with desktop navigation and a mobile bottom bar. Preferences filter the deck by name, skill, role, or city. The directory and profile editor remain available under **Explore the team**.
+
+To enable video calling and the protected team inbox, set a private team key in the same PowerShell terminal before starting Spring Boot:
+
+```powershell
+$env:TEAM_INBOX_KEY = "replace-with-your-private-team-key"
+.\mvnw.cmd spring-boot:run
+```
+
+A visitor likes a profile, opens **Messages**, selects that conversation, and clicks **Video call**. The team member opens `/team-inbox.html`, enters the same key, selects their profile, and clicks **Load conversations**. Incoming calls offer **Answer** and **Decline**. Both participants must keep the page open. Camera and microphone access occurs only after starting or answering; closing, ending, declining, or failed calls releases the devices. Calls time out after 90 seconds without an answer, after 60 seconds without either participant's heartbeat, or at one hour. Sessions and matches are checked on every signaling request. Invitations are limited to five per visitor per minute. A blank `TEAM_INBOX_KEY` disables new invitations and displays an explanation before requesting camera access.
+
+Camera, microphone, browser alerts, and device location require browser support and permissions. For remote devices serve the app over HTTPS. STUN is configured by default; for reliable calling across restrictive networks set `TURN_URL` (for example `turn:your-relay.example:3478`), `TURN_USERNAME`, and `TURN_PASSWORD` to your own relay's settings. ICE configuration is sent to authorized call participants; use scoped, short-lived relay credentials for public hosting. No recording feature is implemented. Browser lifecycle tests mock media; actual two-device media and relay connectivity must also be checked on the intended deployment.
+
+**Location** embeds OpenStreetMap. Supported profile cities use city-center pins; they do not represent live positions. **Use my location** requests a one-time approximate device position and keeps it in page memory. It is supplied to OpenStreetMap to render the map, and is sent to a conversation only by clicking **Share in this chat**. **Clear my location** clears the local position. Unsupported cities have an external map-search link. Map viewing needs internet access.
+
+Notifications for newly saved matches, team replies, and team call actions are persisted per visitor. **Mark all read** only marks items through the most recent displayed ID, preserving replies that arrive during the request. The latest 100 items are shown. Optional browser alerts poll while the page is open; they are not background push notifications and do not operate after the page is closed.
+
+V5 adds the call, ICE signaling, and notification tables to H2 and PostgreSQL. Profile/session deletion cascades to these new rows. Restart the backend after pulling changes so Flyway applies V5 and loads the new controllers; refreshing the browser alone cannot load new Java classes.
+
+Targeted checks that do not bind a network port:
+
+```powershell
+node --test ../FRONTEND/tests/*.test.cjs
+.\mvnw.cmd "-Dtest=PortfolioWorkflowTests" test
+```
+
 ```powershell
 .\mvnw.cmd test
 .\mvnw.cmd package

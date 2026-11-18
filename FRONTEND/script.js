@@ -38,7 +38,7 @@ async function apiCall(path, method = 'GET', data, options = {}) {
   try {
     const headers = { ...(options.headers || {}) };
     if (adminKey && options.admin !== false) headers['X-Admin-Key'] = adminKey;
-    const init = { method, credentials: 'include', signal: controller.signal, headers };
+    const init = { method, credentials: 'include', signal: controller.signal, headers, ...(options.keepalive ? {keepalive:true} : {}) };
     if (data !== undefined) {
       if (typeof FormData !== 'undefined' && data instanceof FormData) init.body = data;
       else {
@@ -341,6 +341,7 @@ async function closeQrScanner() {
 // ROUTING / MODE SELECTION
 function startMode(mode) {
   if (mode !== 'swipe' && mode !== 'directory') return;
+  window.RizzumeExperience?.navigated(mode);
   try { sessionStorage.setItem('rizzumeMode', mode); } catch (e) {}
   document.getElementById('homeScreen').classList.add('hidden');
 
@@ -365,6 +366,7 @@ function goToHome() {
   document.getElementById('directoryScreen').classList.add('hidden');
   document.getElementById('directoryScreen').classList.remove('flex');
   closeProfileScreen();
+  window.RizzumeExperience?.navigated('home');
   lucide.createIcons();
 }
 
@@ -463,7 +465,7 @@ function renderDeck() {
     return;
   }
   emptyDeck.classList.add('hidden');
-  for (let i = cardsState.length - 1; i >= 0; i--) {
+  for (let i = Math.min(cardsState.length, 3) - 1; i >= 0; i--) {
     const profile = cardsState[i];
     const isTopCard = i === 0;
     const card = document.createElement('div');
@@ -474,6 +476,10 @@ function renderDeck() {
     card.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
     card.style.zIndex = zIndex;
     card.setAttribute('data-id', profile.id);
+    if (isTopCard) {
+      card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
+      card.setAttribute('aria-label', 'View profile of ' + profile.name);
+    } else card.setAttribute('aria-hidden', 'true');
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
         <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover" />
@@ -544,6 +550,13 @@ function attachTopCardListeners() {
   activeCardElem = topCard;
   topCard.addEventListener('mousedown', onDragStart);
   topCard.addEventListener('touchstart', onDragStart, { passive: true });
+  topCard.addEventListener('keydown', event => {
+    if ((event.key === 'Enter' || event.key === ' ') && !isSwiping) {
+      event.preventDefault();
+      const profile = PROFILES.find(item => item.id === topCard.getAttribute('data-id'));
+      if (profile) openProfileScreen(profile);
+    }
+  });
   // A click opens details only when the pointer gesture did not cross a drag threshold.
   topCard.addEventListener('click', event => {
     if (hasSwipedOrMoved || isSwiping) {
@@ -1151,7 +1164,8 @@ async function pollChatMessages(initial = false) {
         bubble.dataset.messageId = String(message.id);
         const body = document.createElement('p');
         body.className = 'text-sm whitespace-pre-wrap break-words';
-        body.textContent = message.body;
+        if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(body, message.body);
+        else body.textContent = message.body;
         const time = document.createElement('time');
         time.className = 'block mt-1 text-[9px] opacity-70';
         time.textContent = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1274,6 +1288,7 @@ function toggleMatchesDrawer(show) {
 
 // Render the visitor's server-backed matches safely and attach click/contact actions without inline data handlers.
 function updateMatchesUI() {
+  window.RizzumeExperience?.refresh();
   const count = matchedProfiles.length;
   document.getElementById('matchBadge').textContent = count;
   const list = document.getElementById('matchesList');
@@ -1378,6 +1393,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
   updateDynamicCounts();
   showBackendNotice(false);
+  // Render immediately while the session loads, keeping the discovery screen stable on refresh.
+  let initialMode = 'swipe';
+  try { if (sessionStorage.getItem('rizzumeMode') === 'directory') initialMode = 'directory'; } catch (_) {}
+  startMode(initialMode);
 
   try {
     await apiCall('/session', 'POST', undefined, { admin: false });
@@ -1401,6 +1420,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Check if opened via QR link (e.g., ?profile=fontelar-dave)
   renderDirectory();
   renderDeck();
+  window.RizzumeExperience?.ready();
   const urlParams = typeof URLSearchParams === 'undefined'
     ? { get: () => null }
     : new URLSearchParams((window.location && window.location.search) || '');
@@ -1424,5 +1444,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   if (mode === 'swipe' || mode === 'directory') {
     startMode(mode);
+  } else {
+    startMode('swipe');
   }
 });

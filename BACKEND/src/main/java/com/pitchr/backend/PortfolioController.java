@@ -212,7 +212,7 @@ public class PortfolioController {
         }
     }
 
-    private void requireTeamKey(String supplied) {
+    void requireTeamKey(String supplied) {
         if (teamInboxKey == null || teamInboxKey.isBlank()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team inbox is disabled");
         }

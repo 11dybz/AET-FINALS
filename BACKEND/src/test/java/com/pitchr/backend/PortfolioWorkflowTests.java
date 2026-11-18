@@ -31,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PortfolioWorkflowTests {
     @Autowired MockMvc mvc;
     @Autowired SessionRepository sessions;
+    @Autowired VideoCallRepository calls;
     private final JsonMapper json = new JsonMapper();
 
     @Test
@@ -129,6 +130,133 @@ class PortfolioWorkflowTests {
             .andExpect(status().isOk()).andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5500"));
         mvc.perform(options("/api/profiles").header("Origin", "https://untrusted.example")
             .header("Access-Control-Request-Method", "POST")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void notificationsAreDurableIdempotentAndIsolated() throws Exception {
+        Cookie visitor = session(), other = session();
+        mvc.perform(get("/api/me/notifications")).andExpect(status().isUnauthorized());
+        String swipe = "/api/me/swipes/chee-reynaldo";
+        for (int i = 0; i < 2; i++) mvc.perform(put(swipe).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        var notices = mvc.perform(get("/api/me/notifications").cookie(visitor)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.unreadCount").value(1)).andExpect(jsonPath("$.items.length()").value(1)).andReturn();
+        long matchId = json.readTree(notices.getResponse().getContentAsString()).get("items").get(0).get("id").asLong();
+        mvc.perform(get("/api/me/notifications").cookie(other)).andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(post("/api/team/conversations/" + visitor.getValue() + "/chee-reynaldo/messages")
+            .header("X-Team-Key", "workflow-team").contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"New reply\"}"))
+            .andExpect(status().isOk());
+        // Read only the items already displayed; a reply arriving during the request stays unread.
+        mvc.perform(post("/api/me/notifications/read").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"throughId\":" + matchId + "}")).andExpect(status().isNoContent());
+        mvc.perform(get("/api/me/notifications").cookie(visitor)).andExpect(jsonPath("$.unreadCount").value(1))
+            .andExpect(jsonPath("$.items[0].kind").value("message"));
+    }
+
+    @Test
+    void videoSignalingRequiresMatchOwnershipAndTeamConsent() throws Exception {
+        Cookie visitor = session(), other = session();
+        String payload = "{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}";
+        mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON).content(payload))
+            .andExpect(status().isForbidden());
+        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        String id = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content(payload)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("ringing"))
+            .andReturn().getResponse().getContentAsString()).get("id").asString();
+        mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON).content(payload))
+            .andExpect(status().isConflict());
+        mvc.perform(get("/api/me/calls/" + id).cookie(other)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/team/calls/" + id)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/team/calls?profileId=chee-reynaldo").header("X-Team-Key", "workflow-team"))
+            .andExpect(jsonPath("$[0].id").value(id));
+        mvc.perform(post("/api/me/calls/" + id + "/action").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"accept\",\"answer\":\"v=0\\r\\n\"}")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/team/calls/" + id + "/action").header("X-Team-Key", "workflow-team")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"accept\",\"answer\":\"v=0\\r\\n\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.state").value("accepted"));
+        mvc.perform(post("/api/me/calls/" + id + "/candidates").cookie(other).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"payload\":\"{\\\"candidate\\\":\\\"candidate:test\\\"}\"}")).andExpect(status().isNotFound());
+        mvc.perform(post("/api/me/calls/" + id + "/candidates").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"payload\":\"{\\\"candidate\\\":\\\"candidate:test\\\"}\"}")).andExpect(status().isNoContent());
+        mvc.perform(get("/api/team/calls/" + id).header("X-Team-Key", "workflow-team"))
+            .andExpect(jsonPath("$.signals.length()").value(1));
+        mvc.perform(get("/api/me/calls/" + id).cookie(visitor)).andExpect(jsonPath("$.signals.length()").value(0));
+        mvc.perform(post("/api/me/calls/" + id + "/action").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"end\"}")).andExpect(jsonPath("$.state").value("ended"));
+        mvc.perform(post("/api/team/calls/" + id + "/action").header("X-Team-Key", "workflow-team")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"accept\",\"answer\":\"v=0\\r\\n\"}"))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void abandonedCallsExpireAndInvalidSignalsAreRejected() throws Exception {
+        Cookie visitor = session();
+        mvc.perform(put("/api/me/swipes/dapog-john-greg").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\"dapog-john-greg\",\"offer\":\"bad\"}")).andExpect(status().isBadRequest());
+        var result = mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\"dapog-john-greg\",\"offer\":\"v=0\\r\\n\"}")).andReturn();
+        String id = json.readTree(result.getResponse().getContentAsString()).get("id").asString();
+        mvc.perform(post("/api/me/calls/" + id + "/candidates").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"payload\":\"{}\"}")).andExpect(status().isBadRequest());
+        VideoCall call = calls.findById(id).orElseThrow(); call.createdAt = Instant.now().minusSeconds(100); calls.saveAndFlush(call);
+        mvc.perform(get("/api/me/calls/" + id).cookie(visitor)).andExpect(jsonPath("$.state").value("ended"));
+        mvc.perform(get("/api/me/calls").cookie(visitor)).andExpect(content().json("[]"));
+        mvc.perform(get("/api/me/call-config").cookie(visitor)).andExpect(status().isOk()).andExpect(jsonPath("$.iceServers[0].urls").exists());
+        mvc.perform(get("/api/team/call-config")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void passingAProfileEndsItsCallAndDoesNotBlockTheNextInvitation() throws Exception {
+        Cookie visitor = session();
+        for (String profile : new String[]{"chee-reynaldo", "dapog-john-greg"}) {
+            mvc.perform(put("/api/me/swipes/" + profile).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        }
+        String id = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}")).andReturn().getResponse().getContentAsString()).get("id").asString();
+        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"pass\"}")).andExpect(status().isOk());
+        assertThat(calls.findById(id).orElseThrow().state).isEqualTo("ended");
+        mvc.perform(get("/api/team/calls/" + id).header("X-Team-Key", "workflow-team")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\"dapog-john-greg\",\"offer\":\"v=0\\r\\n\"}")).andExpect(status().isOk());
+    }
+
+    @Test
+    void profileDeletionCleansCallAndNotificationRows() throws Exception {
+        String id = json.readTree(mvc.perform(post("/api/profiles").header("X-Admin-Key", "workflow-admin")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Call cleanup\",\"age\":25}"))
+            .andReturn().getResponse().getContentAsString()).get("id").asString();
+        Cookie visitor = session();
+        mvc.perform(put("/api/me/swipes/" + id).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        String callId = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\"" + id + "\",\"offer\":\"v=0\\r\\n\"}"))
+            .andReturn().getResponse().getContentAsString()).get("id").asString();
+        mvc.perform(post("/api/me/calls/" + callId + "/candidates").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"payload\":\"{\\\"candidate\\\":\\\"candidate:test\\\"}\"}")).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/profiles/" + id).header("X-Admin-Key", "workflow-admin")).andExpect(status().isNoContent());
+        assertThat(calls.findById(callId)).isEmpty();
+        mvc.perform(get("/api/me/notifications").cookie(visitor)).andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void repeatedInvitationsAreRateLimited() throws Exception {
+        Cookie visitor = session();
+        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        String body = "{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}";
+        for (int i = 0; i < 5; i++) {
+            String callId = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("id").asString();
+            mvc.perform(post("/api/me/calls/" + callId + "/action").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"end\"}")).andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isTooManyRequests());
     }
 
     private Cookie session() throws Exception {

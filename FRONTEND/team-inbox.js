@@ -1,9 +1,11 @@
 (() => {
   const API = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
   const $ = id => document.getElementById(id);
-  let generation = 0, active = null, sending = false;
+  let generation = 0, active = null, sending = false, refreshTimer;
   function status(text) { $('inboxStatus').textContent = text; }
   function reset() {
+    clearTimeout(refreshTimer);
+    window.RizzumeTeamCalls?.reset();
     generation++; active = null; $('teamThread').classList.add('hidden');
     $('teamMessages').replaceChildren(); $('conversationList').replaceChildren(); $('teamReply').value = '';
     status('Load conversations for the selected profile.');
@@ -27,6 +29,7 @@
     try {
       const items = await call('/team/conversations?profileId=' + encodeURIComponent(profile), key);
       if (version !== generation) return;
+      window.RizzumeTeamCalls?.start({profile, key});
       status(items.length ? 'Select a conversation.' : 'No conversations for this profile.');
       items.forEach(item => {
         const button = document.createElement('button'); button.type = 'button';
@@ -46,14 +49,21 @@
     return '/team/conversations/' + encodeURIComponent(thread.session) + '/' + encodeURIComponent(thread.profile) + '/messages';
   }
   async function refresh(thread) {
+    clearTimeout(refreshTimer);
     const messages = await call(path(thread), thread.key);
     if (active !== thread || generation !== thread.version) return;
     const log = $('teamMessages'); log.replaceChildren();
     messages.forEach(message => {
       const p = document.createElement('p'); p.className = 'mb-2 whitespace-pre-wrap break-words';
-      p.textContent = message.sender + ': ' + message.body; log.appendChild(p);
+      if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(p, message.sender + ': ' + message.body);
+      else p.textContent = message.sender + ': ' + message.body;
+      log.appendChild(p);
     });
     log.scrollTop = log.scrollHeight; status('Conversation loaded.');
+    refreshTimer = setTimeout(() => {
+      if (active === thread && generation === thread.version && !document.hidden)
+        refresh(thread).catch(error => { if (active === thread) status(error.message + ' Reload conversations to retry.'); });
+    }, 4000);
   }
   $('sendReply').onclick = async () => {
     if (sending || !active) return;
@@ -75,4 +85,8 @@
       const option = document.createElement('option'); option.value = profile.id; option.textContent = profile.name; select.appendChild(option);
     }); reset();
   }).catch(error => status(error.message));
+  if (typeof document.addEventListener === 'function') document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && active) refresh(active).catch(error => status(error.message));
+  });
+  if (typeof window.addEventListener === 'function') window.addEventListener('pagehide', () => clearTimeout(refreshTimer));
 })();

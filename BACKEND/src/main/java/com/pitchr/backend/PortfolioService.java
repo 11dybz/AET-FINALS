@@ -34,18 +34,20 @@ public class PortfolioService {
     private final ProfileImageRepository images;
     private final ProfileImageBlobRepository imageBlobs;
     private final MessageRepository messages;
+    private final CollaborationService collaboration;
     private final int sessionDays;
     private final Map<String, Deque<Instant>> sendWindows = new ConcurrentHashMap<>();
 
     public PortfolioService(ProfileRepository profiles, SessionRepository sessions, SwipeRepository swipes,
                             ProfileImageRepository images, ProfileImageBlobRepository imageBlobs,
-                            MessageRepository messages, @Value("${pitchr.session-days}") int sessionDays) {
+                            MessageRepository messages, CollaborationService collaboration, @Value("${pitchr.session-days}") int sessionDays) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.swipes = swipes;
         this.images = images;
         this.imageBlobs = imageBlobs;
         this.messages = messages;
+        this.collaboration = collaboration;
         this.sessionDays = sessionDays;
     }
 
@@ -188,9 +190,12 @@ public class PortfolioService {
             created.createdAt = Instant.now();
             return created;
         });
+        boolean newlyMatched = action != Swipe.Action.pass && (swipe.id == null || swipe.action == Swipe.Action.pass);
         swipe.action = action;
         swipe.updatedAt = Instant.now();
         swipes.save(swipe);
+        if (action == Swipe.Action.pass) collaboration.revokeCalls(session.id, profileId);
+        if (newlyMatched) collaboration.notify(session.id, profileId, "match", "You saved " + profile.name + ". Say hello or invite them to a video call.");
         return new SwipeResult(profileId, action, action != Swipe.Action.pass, action == Swipe.Action.super_like);
     }
 
@@ -255,6 +260,7 @@ public class PortfolioService {
         message.sender = Message.Sender.member;
         message.body = clean;
         message.createdAt = Instant.now();
+        collaboration.notify(sessionId, profileId, "message", clean);
         return MessageResponse.from(messages.save(message));
     }
 
