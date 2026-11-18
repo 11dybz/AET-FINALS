@@ -1364,6 +1364,12 @@ async function copyTeamContact() {
 // Check login optionally: guests land on the clean Welcome page and see blurred teaser cards when exploring
 window.addEventListener('DOMContentLoaded', async () => {
   document.body?.classList.add('workspace-loading');
+  let savedMode = null;
+  try { savedMode = sessionStorage.getItem('rizzumeMode'); } catch (_) {}
+  if (savedMode === 'swipe' || savedMode === 'directory') {
+    startMode(savedMode);
+  }
+
   const loggedIn = window.RizzumeAccount ? await window.RizzumeAccount.checkOptional() : false;
   PROFILES = []; cardsState = [];
   lucide.createIcons();
