@@ -2,6 +2,14 @@
   const API = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
   const id = document.body.dataset.profileId;
   let available = false, saving = false;
+  const accountReady = window.RizzumeAccount?.checkOptional ? window.RizzumeAccount.checkOptional().catch(() => false) : Promise.resolve(false);
+  const isOwnProfile = () => !!id && window.RizzumeAccount?.user?.profileId === id;
+  function syncOwnProfileActions() {
+    document.querySelectorAll('[onclick="likeProfile()"], [data-profile-connect]').forEach(control => {
+      control.hidden = isOwnProfile();
+    });
+  }
+  accountReady.then(syncOwnProfileActions);
   const sections = document.querySelectorAll('main > section');
 
   function imageUrl(value) {
@@ -30,7 +38,8 @@
         method,
         credentials: 'include',
         signal: controller.signal,
-        ...(data ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) } : {})
+        ...(window.RizzumeHTTP ? {headers:window.RizzumeHTTP.headers(API + path,data ? {'Content-Type':'application/json'} : {})} : data ? {headers:{'Content-Type':'application/json'}} : {}),
+        ...(data ? {body:JSON.stringify(data)} : {})
       });
       const text = await response.text();
       const result = text ? JSON.parse(text) : null;
@@ -51,6 +60,8 @@
   async function openDirectMessage(event) {
     if (!available || !id) return;
     event.preventDefault();
+    await accountReady;
+    if (isOwnProfile()) return notify('You cannot message your own profile.');
     if (saving) return;
     saving = true;
     try {
@@ -137,8 +148,9 @@
     }
 
     document.querySelectorAll('a[href^="mailto:"]').forEach(link => {
+      link.setAttribute('data-profile-connect','');
       link.href = 'index.html?chat=' + encodeURIComponent(id);
-      link.hidden = false;
+      link.hidden = isOwnProfile();
       link.onclick = openDirectMessage;
     });
 
@@ -183,6 +195,8 @@
   }
 
   window.likeProfile = async () => {
+    await accountReady;
+    if (isOwnProfile()) return notify('You cannot match with your own profile.');
     if (saving) return;
     if (!available) return notify('Backend unavailable. Reload before saving a match.');
     saving = true;

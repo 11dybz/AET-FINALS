@@ -107,6 +107,12 @@ public class AccountService {
         if (!Objects.equals(account.profileId, profileId))
             throw error(HttpStatus.FORBIDDEN, "You can only edit your own profile.");
     }
+    public String profileIdForWorkspace(String workspaceId) {
+        return accounts.findByWorkspaceId(workspaceId).map(account -> account.profileId).orElse(null);
+    }
+    public boolean ownsWorkspaceProfile(String workspaceId, String profileId) {
+        return profileId != null && accounts.existsByWorkspaceIdAndProfileId(workspaceId, profileId);
+    }
     private User user(Account account) { return new User(account.id, account.displayName, account.email, account.profileId); }
     private ResponseStatusException error(HttpStatus status, String message) { return new ResponseStatusException(status, message); }
     public record User(String id, String name, String email, String profileId) {}

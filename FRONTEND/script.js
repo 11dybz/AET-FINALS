@@ -97,7 +97,7 @@ async function apiCall(path, method = 'GET', data, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const headers = { ...(options.headers || {}) };
+    const headers = window.RizzumeHTTP?.headers(`${API_BASE}${path}`,options.headers || {}) || {...(options.headers || {})};
     if (adminKey && options.admin !== false) headers['X-Admin-Key'] = adminKey;
     const init = { method, credentials: 'include', signal: controller.signal, headers, ...(options.keepalive ? {keepalive:true} : {}) };
     if (data !== undefined) {
@@ -130,12 +130,12 @@ async function refreshProfilesAndMatches() {
   if (Array.isArray(profiles)) {
     PROFILES = profiles.map(profile => ({...profile,
       page: FALLBACK_PROFILES.find(member => member.id === profile.id)?.page}));
-    cardsState = [...PROFILES];
+    cardsState = matchableProfiles();
     swipeHistory = [];
   }
   if (!isGuestUser()) {
     const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
-    matchedProfiles = Array.isArray(matches) ? matches : [];
+    matchedProfiles = Array.isArray(matches) ? matchableProfiles(matches) : [];
   } else {
     matchedProfiles = [];
   }
@@ -161,6 +161,14 @@ function updateDynamicCounts() {
 
 function canEditProfile(profileId) {
   return backendAvailable && !!window.RizzumeAccount?.user?.profileId && window.RizzumeAccount.user.profileId === profileId;
+}
+
+function isOwnProfile(profileId) {
+  return !!profileId && window.RizzumeAccount?.user?.profileId === profileId;
+}
+
+function matchableProfiles(profiles = PROFILES) {
+  return profiles.filter(profile => !isOwnProfile(profile.id));
 }
 
 function showBackendNotice(readOnly) {
@@ -539,6 +547,7 @@ function playBeep(type) {
 
 // RENDER PROFILE STACK (CONTINUOUS LOOP + BLURRED TEASER FOR GUESTS)
 function renderDeck() {
+  cardsState = matchableProfiles(cardsState);
   const container = document.getElementById('cardsWrapper');
   const emptyDeck = document.getElementById('emptyDeck');
   container.innerHTML = '';
@@ -741,6 +750,7 @@ function triggerSwipeAction(direction) {
 
 async function finalizeSwipe(direction) {
   if (cardsState.length === 0 || isSwiping || matchRemovalPending) return;
+  if (isOwnProfile(cardsState[0].id)) { renderDeck(); return; }
   const card = activeCardElem || document.querySelector('#cardsWrapper .swipe-card:last-child');
   if (!card) return;
 
@@ -832,6 +842,7 @@ async function rewindLastSwipe() {
 }
 
 function handleMatchSuccess(profile, isSuper) {
+  if (isOwnProfile(profile.id)) return;
   currentlyViewingProfile = profile;
   const existing = matchedProfiles.find(item => item.id === profile.id);
   if (!existing) matchedProfiles.push({ ...profile, isSuper });
@@ -881,6 +892,7 @@ function openChatFromMatch() {
 async function messageCurrentProfile() {
   if (!currentlyViewingProfile) return;
   const profile = currentlyViewingProfile;
+  if (isOwnProfile(profile.id)) return showToast('Your profile', 'You cannot match or message yourself.');
   if (!backendAvailable) {
     return copyCurrentProfileEmail();
   }
@@ -986,6 +998,8 @@ function openProfileScreen(profile) {
   });
 
   renderProfileGallery(profile);
+  const contactButton = document.getElementById('detailGetInTouchBtn');
+  if (contactButton) contactButton.hidden = isOwnProfile(profile.id);
   const actions = ensureProfileActions();
   actions.replaceChildren();
   if (canEditProfile(profile.id)) {
@@ -1282,6 +1296,7 @@ function askToRemoveMatch(profileId) {
 }
 
 function updateMatchesUI() {
+  matchedProfiles = matchableProfiles(matchedProfiles);
   window.RizzumeExperience?.refresh();
   const count = matchedProfiles.length;
   document.getElementById('matchBadge').textContent = count;

@@ -105,7 +105,7 @@ async function loadConversations() {
     const conversations = await apiCall('/me/conversations','GET',undefined,{admin:false});
     if (!chatOpen || request !== chatListRequest) return;
     if (!Array.isArray(conversations)) throw new Error('Could not load conversations.');
-    chatConversations = conversations.filter(c => c?.profile?.id); chatListLoaded = true; chatListError = '';
+    chatConversations = conversations.filter(c => c?.profile?.id && !isOwnProfile(c.profile.id)); chatListLoaded = true; chatListError = '';
     const unreadTotal = chatConversations.reduce((total,c) => total + Number(c.unreadCount || 0),0);
     ['messagesUnreadBadge','sidebarMessageCount'].forEach(id => { const badge = chatElement(id); if (badge) { badge.textContent = unreadTotal > 99 ? '99+' : String(unreadTotal); badge.hidden = !unreadTotal; badge.classList.toggle('hidden',!unreadTotal); } });
   } catch (error) {
@@ -137,6 +137,7 @@ function rememberChatDraft() {
 }
 
 async function openChat(profileId) {
+  if (profileId && isOwnProfile(profileId)) return showToast('Your profile','You cannot message yourself.');
   if (profileId && !matchedProfiles.some(p => p.id === profileId)) return showToast('Match first','Like this profile before sending a message.');
   if (chatOpen && !profileId) { showConversationList(); return; }
   if (!chatOpen) {
@@ -174,6 +175,7 @@ function discoverFromMessages() { closeChat(); startMode('swipe'); }
 async function openChatForProfile(profileId) { toggleMatchesDrawer(false); await openChat(profileId); }
 
 async function openChatThread(profileId) {
+  if (isOwnProfile(profileId)) return showToast('Your profile','You cannot message yourself.');
   if (!chatOpen) return;
   if (chatProfileId === profileId && chatThreadReady) { if (!compactChat()) chatElement('chatComposer').focus(); return; }
   rememberChatDraft(); const generation = ++chatGeneration;

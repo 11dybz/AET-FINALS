@@ -18,7 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**").allowedOrigins(origins)
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            .allowedHeaders("Content-Type", "X-Admin-Key", "X-Team-Key").allowCredentials(true).maxAge(3600);
+            .allowedHeaders("Content-Type", "Accept", "ngrok-skip-browser-warning", "X-Admin-Key", "X-Team-Key").allowCredentials(true).maxAge(3600);
     }
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {

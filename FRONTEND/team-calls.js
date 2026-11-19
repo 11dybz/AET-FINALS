@@ -7,7 +7,7 @@
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
     try {
       const response = await fetch(API + path, {method, signal:controller.signal, credentials:'include', keepalive:!!options.keepalive,
-        headers:{'X-Team-Key':key || '', ...(body ? {'Content-Type':'application/json'} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
+        headers:window.RizzumeHTTP?.headers(API + path,{'X-Team-Key':key || '',...(body ? {'Content-Type':'application/json'} : {})}) || {'X-Team-Key':key || '',...(body ? {'Content-Type':'application/json'} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
       const text = await response.text(), data = text ? JSON.parse(text) : null;
       if (!response.ok) { const error = new Error(data?.message || 'Call request failed.'); error.status = response.status; throw error; }
       return data;

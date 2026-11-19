@@ -29,8 +29,65 @@ class AccountWorkflowTests {
     @Autowired AccountRepository accounts;
     @Autowired AccountSessionRepository sessions;
     @Autowired VideoCallRepository calls;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final JsonMapper json = new JsonMapper();
     private static final String PASSWORD = "A test password 42!";
+
+    @Test void tunnelHostLoginPreservesSessionsAndConfiguredCorsAllowsNgrokHeaders() throws Exception {
+        String email=email();register(email);
+        var loggedIn=mvc.perform(post("/api/auth/login").header("Origin","https://rizzume.ngrok-free.dev")
+            .header("Host","rizzume.ngrok-free.dev").header("ngrok-skip-browser-warning","1")
+            // Tomcat's native proxy support normalizes the external HTTPS request before MVC.
+            .with(request->{request.setScheme("https");request.setSecure(true);
+                request.setServerName("rizzume.ngrok-free.dev");request.setServerPort(443);
+                request.setRemoteAddr("ngrok-login-test");return request;})
+            .contentType(MediaType.APPLICATION_JSON).content(credentials(email,PASSWORD)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.authenticated").value(true)).andReturn();
+        Cookie cookie=loggedIn.getResponse().getCookie(PortfolioController.COOKIE);
+        mvc.perform(get("/api/auth/me").cookie(cookie).header("Host","rizzume.ngrok-free.dev"))
+            .andExpect(jsonPath("$.user.email").value(email));
+        mvc.perform(post("/api/auth/logout").cookie(cookie).header("Origin","https://attacker.example")
+            .header("Host","rizzume.ngrok-free.dev")
+            .with(request->{request.setScheme("https");request.setServerName("rizzume.ngrok-free.dev");request.setServerPort(443);return request;}))
+            .andExpect(status().isForbidden());
+        mvc.perform(options("/api/auth/login").header("Origin","http://localhost:5500")
+            .header("Access-Control-Request-Method","POST")
+            .header("Access-Control-Request-Headers","content-type,ngrok-skip-browser-warning"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Access-Control-Allow-Headers",org.hamcrest.Matchers.containsString("ngrok-skip-browser-warning")));
+        mvc.perform(options("/api/auth/login").header("Origin","https://attacker.example")
+            .header("Access-Control-Request-Method","POST")).andExpect(status().isForbidden());
+    }
+
+    @Test void ownProfileCannotBeMatchedMessagedOrCalledEvenWithALegacySelfMatch() throws Exception {
+        String ownerEmail=email(); Cookie owner=register(ownerEmail);
+        var created=mvc.perform(post("/api/profiles").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Self Match Check\",\"age\":25}"))
+            .andExpect(status().isCreated()).andReturn();
+        String id=json.readTree(created.getResponse().getContentAsString()).get("id").asString();
+        for (String action : new String[]{"like","super_like"})
+            mvc.perform(put("/api/me/swipes/"+id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\""+action+"\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("You cannot match with your own profile."));
+        mvc.perform(get("/api/me/profile").cookie(owner)).andExpect(jsonPath("$.id").value(id));
+        mvc.perform(get("/api/profiles/"+id)).andExpect(status().isOk());
+        String workspace=accounts.findByEmail(ownerEmail).orElseThrow().workspaceId;
+        // Simulate a connection saved before the profile was linked to this account.
+        jdbc.update("insert into swipes(session_id,profile_id,action,created_at,updated_at) values (?,?,'super_like',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",workspace,id);
+        mvc.perform(get("/api/me/matches").cookie(owner)).andExpect(content().json("[]"));
+        mvc.perform(get("/api/me/conversations").cookie(owner)).andExpect(content().json("[]"));
+        mvc.perform(post("/api/me/conversations/"+id+"/messages").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"body\":\"Self message\"}")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/me/calls").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profileId\":\""+id+"\",\"offer\":\"v=0\\r\\n\"}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(put("/api/me/swipes/"+id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"pass\"}")).andExpect(status().isOk());
+        Cookie other=register(email());
+        mvc.perform(put("/api/me/swipes/"+id).cookie(other).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        mvc.perform(get("/api/me/matches").cookie(other)).andExpect(jsonPath("$[0].id").value(id));
+    }
 
     @Test void registrationHashesPasswordsAndIssuesPrivateSessionCookie() throws Exception {
         String email = email(); Cookie cookie = register(email);

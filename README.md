@@ -71,8 +71,23 @@ TURN relay settings are optional for calls across restrictive networks. See `BAC
 - Messaging with search/unread filters, empty/loading/error states, read receipts and per-conversation drafts held in memory.
 - Protected team inbox, video calling, location sharing and saved notifications with read controls.
 - Confirmed match removal that persists to the database and updates the matches and inbox without deleting message history.
+- Own profiles stay visible in the directory for editing but are excluded from discovery and matches. The server rejects self-matches, self-messages and self-calls. V8 clears existing self-connections on backend restart without deleting message history.
 - Resume PDF download from My profile or the account menu, using saved profile details, skills, projects, highlights and public contact links.
 - Batched profile/gallery reads, concurrent initial requests, and cached profile updates to reduce unnecessary loading.
+
+## Share the local app with ngrok
+
+Keep Spring Boot running and forward the tunnel to its actual port. For the Supabase command above, use a second terminal:
+
+```powershell
+ngrok http 8081
+```
+
+Open the resulting HTTPS forwarding URL. The same tunnel serves both the frontend and `/api` routes. If Spring Boot runs on port 8080, use `ngrok http 8080` instead. The tunnel must point to the Spring Boot process for login, profile data and messages to work.
+
+Restart Spring Boot after pulling these changes, then reload the tunnel page. Native forwarded-header handling lets the backend recognize HTTPS from a trusted local proxy and keeps same-origin login checks working.
+
+API requests use `Accept: application/json` and add `ngrok-skip-browser-warning: 1` on ngrok hosts. The initial page visit may still show ngrok's Visit Site screen. Account errors now distinguish tunnel HTML responses, an unreachable backend and a missing account route. A working `/api/auth/me` returns JSON (for example `{"authenticated":false,"user":null,"expiresAt":null}` while signed out). If the tunnel rewrites the upstream Host header, add the exact public origin to `ALLOWED_ORIGINS` and restart the backend. Do not enable arbitrary origins.
 
 ## Tests
 
@@ -92,4 +107,4 @@ The full suite is `.\mvnw.cmd test`; its HTTP/embedded PostgreSQL checks need an
 
 ## Include with your commit
 
-Commit new source files as well as modified files, including the account classes, V6/V7 migrations, frontend JS/CSS, `resume.js`, and the complete `FRONTEND/vendor` directory with its license. The PDF dependency is already bundled, so teammates do not need to install it. Keep `.env`, `BACKEND/data`, and `BACKEND/target` local; they are ignored by Git.
+Commit new source files as well as modified files, including the account classes, all migrations (including V8), frontend JS/CSS, `resume.js`, and the complete `FRONTEND/vendor` directory with its license. The PDF dependency is already bundled, so teammates do not need to install it. Keep `.env`, `BACKEND/data`, and `BACKEND/target` local; they are ignored by Git.

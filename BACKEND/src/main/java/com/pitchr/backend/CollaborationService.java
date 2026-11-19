@@ -64,7 +64,8 @@ public class CollaborationService {
         if (team && !profiles.existsById(profileId)) throw failure(HttpStatus.NOT_FOUND, "Profile not found");
         var items = team ? calls.findByProfileIdAndStateInOrderByCreatedAtDesc(profileId, ACTIVE)
             : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(session(token, false).id, ACTIVE);
-        return items.stream().filter(c -> !expired(c)).limit(100)
+        return items.stream().filter(c -> !expired(c))
+            .filter(c -> !accounts.ownsWorkspaceProfile(c.sessionId, c.profileId)).limit(100)
             .map(c -> new CallSummary(c.id, c.profileId, c.state, c.createdAt)).toList();
     }
 
@@ -138,6 +139,8 @@ public class CollaborationService {
         return accounts.resolve(token, lock).orElseThrow(() -> failure(HttpStatus.UNAUTHORIZED, "Session expired"));
     }
     private void matched(String session, String profile) {
+        if (accounts.ownsWorkspaceProfile(session, profile))
+            throw failure(HttpStatus.FORBIDDEN, "You cannot call your own profile.");
         if (swipes.findBySessionIdAndProfileId(session, profile).filter(s -> s.action != Swipe.Action.pass).isEmpty())
             throw failure(HttpStatus.FORBIDDEN, "Match this profile before calling");
     }

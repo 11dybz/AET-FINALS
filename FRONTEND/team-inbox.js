@@ -14,7 +14,7 @@
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(API + path, {method, credentials: 'include', signal: controller.signal,
-        headers: {'X-Team-Key': key, ...(body ? {'Content-Type': 'application/json'} : {})},
+        headers: window.RizzumeHTTP?.headers(API + path,{'X-Team-Key':key,...(body ? {'Content-Type':'application/json'} : {})}) || {'X-Team-Key':key,...(body ? {'Content-Type':'application/json'} : {})},
         ...(body ? {body: JSON.stringify(body)} : {})});
       const text = await response.text(); const result = text ? JSON.parse(text) : null;
       if (!response.ok) throw new Error(result?.message || 'Request failed (' + response.status + ')');

@@ -5,8 +5,12 @@
   async function request(path, method = 'GET', body) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch(API + '/auth' + path, {method, credentials:'include', signal:controller.signal,
-        ...(body === undefined ? {} : {headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})});
+      const endpoint = API + '/auth' + path;
+      const headers = window.RizzumeHTTP?.headers(endpoint,body === undefined ? {} : {'Content-Type':'application/json'});
+      const response = await fetch(endpoint, {method, credentials:'include', signal:controller.signal,
+        ...(headers ? {headers} : body === undefined ? {} : {headers:{'Content-Type':'application/json'}}),
+        ...(body === undefined ? {} : {body:JSON.stringify(body)})});
+      if (window.RizzumeHTTP) return await window.RizzumeHTTP.accountJson(response);
       const text = await response.text(); let data;
       try { data = text ? JSON.parse(text) : null; } catch (_) { throw new Error('The account service is unavailable. Please try again shortly.'); }
       if (!response.ok) {

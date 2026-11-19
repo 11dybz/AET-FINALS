@@ -189,8 +189,9 @@ public class PortfolioService {
 
     public List<ProfileResponse> matches(String token) {
         VisitorSession session = requireSession(token, false);
+        String ownProfileId = accounts.profileIdForWorkspace(session.id);
         List<Swipe> matched = swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
-            .filter(s -> s.action != Swipe.Action.pass).toList();
+            .filter(s -> s.action != Swipe.Action.pass && !s.profile.id.equals(ownProfileId)).toList();
         Map<String, List<ProfileImage>> galleries = galleries(matched.stream().map(s -> s.profile.id).toList());
         return matched.stream().map(s -> ProfileResponse.from(s.profile, s.action == Swipe.Action.super_like,
             galleries.getOrDefault(s.profile.id, List.of()))).toList();
@@ -207,6 +208,8 @@ public class PortfolioService {
         if (action == null) throw badRequest("action must be pass, like, or super_like");
         VisitorSession session = requireSession(token, true);
         Profile profile = requireProfile(profileId);
+        if (action != Swipe.Action.pass && accounts.ownsWorkspaceProfile(session.id, profileId))
+            throw badRequest("You cannot match with your own profile.");
         Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseGet(() -> {
             Swipe created = new Swipe();
             created.session = session;
@@ -225,8 +228,10 @@ public class PortfolioService {
 
     public List<ConversationResponse> conversations(String token) {
         VisitorSession session = requireSession(token, false);
+        String ownProfileId = accounts.profileIdForWorkspace(session.id);
         return swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
             .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
+            .filter(s -> !s.profile.id.equals(ownProfileId))
             .map(swipe -> {
                 List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(session.id, swipe.profile.id);
                 Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
@@ -293,6 +298,7 @@ public class PortfolioService {
             .filter(s -> s.session.expiresAt.isAfter(Instant.now()))
             .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
             .filter(s -> profileId == null || profileId.isBlank() || s.profile.id.equals(profileId))
+            .filter(s -> !accounts.ownsWorkspaceProfile(s.session.id, s.profile.id))
             .map(swipe -> {
                 List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(swipe.session.id, swipe.profile.id);
                 Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
@@ -308,6 +314,8 @@ public class PortfolioService {
     }
 
     private void requireMatched(VisitorSession session, String profileId) {
+        if (accounts.ownsWorkspaceProfile(session.id, profileId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot message your own profile.");
         Profile profile = requireProfile(profileId);
         Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseThrow(() ->
             new ResponseStatusException(HttpStatus.FORBIDDEN, "Profile is not matched"));

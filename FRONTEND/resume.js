@@ -177,7 +177,8 @@
   async function savedProfile() {
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(),30000);
     try {
-      const response = await fetch(API + '/me/profile',{credentials:'include',signal:controller.signal});
+      const response = await fetch(API + '/me/profile',{credentials:'include',signal:controller.signal,
+        ...(window.RizzumeHTTP ? {headers:window.RizzumeHTTP.headers(API + '/me/profile')} : {})});
       const profile = await response.json();
       if (!response.ok) {
         if (response.status === 401) window.RizzumeAccount?.expired();

@@ -316,7 +316,7 @@
   $('discoveryFilters').onclick = () => preferences.open();
   function applyPreferences() {
     const query = $('discoverySearch').value.trim().toLowerCase();
-    cardsState = PROFILES.filter(p => [p.name,p.role,p.location,...(p.tags || [])].some(value => String(value || '').toLowerCase().includes(query)));
+    cardsState = matchableProfiles().filter(p => [p.name,p.role,p.location,...(p.tags || [])].some(value => String(value || '').toLowerCase().includes(query)));
     renderDeck();
     if (!cardsState.length) $('emptyDeckTitle').textContent = 'No profiles match your preferences.';
     else $('emptyDeckTitle').textContent = 'No profiles match your filter';
