@@ -7,8 +7,15 @@
   function syncOwnProfileActions() {
     document.querySelectorAll('[onclick="likeProfile()"], [data-profile-connect]').forEach(control => {
       control.hidden = isOwnProfile();
-      if (!isOwnProfile()) control.textContent=relationship?.status === 'accepted' ? 'Message connection'
-        : relationship?.status === 'pending' ? (relationship.direction === 'incoming' ? 'Review connection request' : 'View sent request') : 'Send connection request';
+      if (!isOwnProfile()) {
+        const label=relationship?.status === 'accepted' ? 'Message connection'
+          : relationship?.status === 'pending' ? (relationship.direction === 'incoming' ? 'Review connection request' : 'View sent request') : 'Send connection request';
+        control.setAttribute?.('aria-label',label);
+        control.title=label;
+        const textLabel=control.querySelector?.('span');
+        if (textLabel) textLabel.textContent=label;
+        else if (!control.querySelector?.('svg, [data-lucide]')) control.textContent=label;
+      }
     });
   }
   async function refreshRelationship() {

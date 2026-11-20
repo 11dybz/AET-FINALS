@@ -4,7 +4,7 @@
   const request = (path, method = 'GET', data, options = {}) => apiCall(path, method, data, {...options, admin: false});
   let mode = 'swipe', feed = [], unread = 0, latestId = null, pollTimer, polling = false, ready = false;
   let feedLoaded = false, feedError = false;
-  let notifyBrowser = false, filter = 'all', location = null;
+  let notifyBrowser = false, filter = 'all';
   try { notifyBrowser = localStorage.getItem('rzBrowserNotifications') === 'true'; } catch (_) {}
 
   const qrSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2"/></svg>`;
@@ -22,18 +22,17 @@
       <div class="rz-sidebar-label">Your connections <span>Made for building</span></div>
       <div id="sidebarMatches" class="rz-match-preview"></div>
       <div id="sidebarEmpty" class="rz-sidebar-empty">Good projects start with a hello.<br>Send a request to connect.</div></div>
-      <div class="rz-sidebar-footer"><div id="sidebarAccount" class="rz-account-summary"></div><button id="sidebarLogout" type="button" class="rz-account-logout">Log out</button><a href="team-inbox.html">${icon('lock')}Team workspace ${icon('arrow')}</a><p>Find your people. Build something great.<br>Rizzume · Online portfolio showcase</p></div>
+      <div class="rz-sidebar-footer"><div id="sidebarAccount" class="rz-account-summary"></div><button id="sidebarLogout" type="button" class="rz-account-logout">Log out</button><p>Find your people. Build something great.<br>Rizzume · Online portfolio showcase</p></div>
     </aside>
     <header class="rz-topbar"><div class="rz-breadcrumb">Your workspace <span>/</span> <strong id="rzBreadcrumb">Discover</strong></div>
-      <div class="rz-top-actions"><button id="topLocation" class="rz-location-button">${icon('pin')}<span id="topLocationLabel">Explore locations</span></button><button id="topNotifications" class="rz-icon-button" aria-label="Open notifications">${icon('bell')}<span id="topNotificationBadge" class="rz-badge" hidden></span></button><button id="topQr" class="rz-icon-button" aria-label="Scan QR Code" title="Scan Member QR Code">${qrSvg}</button><button id="topHelp" class="rz-icon-button" aria-label="How Rizzume works">${icon('spark')}</button><button id="accountMenuButton" class="rz-avatar" type="button" aria-label="Your account">You</button></div>
+      <div class="rz-top-actions"><button id="topNotifications" class="rz-icon-button" aria-label="Open notifications">${icon('bell')}<span id="topNotificationBadge" class="rz-badge" hidden></span></button><button id="topQr" class="rz-icon-button" aria-label="Scan QR Code" title="Scan Member QR Code">${qrSvg}</button><button id="topHelp" class="rz-icon-button" aria-label="How Rizzume works">${icon('spark')}</button><button id="accountMenuButton" class="rz-avatar" type="button" aria-label="Your account">You</button></div>
     </header>
     <div class="rz-heading" id="discoveryHeading"><div><div class="rz-eyebrow">Great people. Greater possibilities.</div><h2>Find your next connection<span style="color:#fe3c72">.</span></h2><p>Meet the minds behind the code. See who clicks.</p></div><button id="discoveryFilters" class="rz-outline-button">${icon('settings')}Preferences</button></div>
     <aside id="discoveryTip" class="rz-tip"><div class="rz-tip-art">${icon('spark')}</div><h3>Great things start<br>with a right swipe.</h3><p>Find a skill that clicks.<br>Send a request. Say hello.<br>Build something together.</p><hr><div class="rz-status">Open for collaboration</div><small>Profiles are saved to your matches.<br>A saved profile isn’t a mutual match.</small></aside>
-    <nav class="rz-mobile-nav" aria-label="Mobile navigation"><button data-nav="swipe" aria-current="page">${icon('discover')}Discover</button><button data-nav="directory">${icon('grid')}Explore</button><button data-nav="matches">${icon('heart')}Matches</button><button data-nav="messages">${icon('message')}Messages</button><button data-nav="location">${icon('map')}Map</button></nav>`;
+    <nav class="rz-mobile-nav" aria-label="Mobile navigation"><button data-nav="swipe" aria-current="page">${icon('discover')}Discover</button><button data-nav="directory">${icon('grid')}Explore</button><button data-nav="matches">${icon('heart')}Matches</button><button data-nav="messages">${icon('message')}Messages</button></nav>`;
   document.body.classList.add('rizzume-app');
   while (shell.firstChild) document.body.insertBefore(shell.firstChild, $('homeScreen'));
   document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.nav)));
-  $('topLocation').onclick = () => openMap();
   $('topNotifications').onclick = () => openNotifications();
   $('topQr').onclick = () => openQrScanner();
   $('topHelp').onclick = () => toggleInfoModal();
@@ -246,71 +245,6 @@
     finally { polling = false; pollTimer = setTimeout(() => { if (!document.hidden || notifyBrowser) poll(); else pollTimer = null; }, document.hidden ? 15000 : 8000); }
   }
 
-  const cities = [
-    {name:'Manila, Philippines', match:'manila', lat:14.5995, lon:120.9842},
-    {name:'Quezon City, Philippines', match:'quezon', lat:14.6760, lon:121.0437},
-    {name:'Makati, Philippines', match:'makati', lat:14.5547, lon:121.0244},
-    {name:'Pasig, Philippines', match:'pasig', lat:14.5764, lon:121.0851},
-    {name:'Taguig, Philippines', match:'taguig', lat:14.5176, lon:121.0509}
-  ];
-  const maps = dialog('locationExplorer', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><div class="rz-eyebrow">A world of possibility</div><h2>Make a local connection</h2><p>Explore profile locations or choose your own.</p></div><button data-close class="rz-icon-button" aria-label="Close location map">${icon('close')}</button></div>
-    <label for="mapCity">Explore a city<select id="mapCity">${cities.map((c,i) => `<option value="${i}">${c.name}</option>`).join('')}<option value="mine" hidden>Your current area</option></select></label>
-    <iframe id="locationMap" class="rz-location-map" title="OpenStreetMap location explorer" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
-    <p id="locationStatus" role="status" class="rz-help"></p><div class="rz-dialog-actions"><button id="useLocation" class="rz-primary">${icon('pin')}Use my location</button><button id="clearLocation" class="rz-outline-button" hidden>Clear my location</button><a id="externalMap" target="_blank" rel="noopener noreferrer" class="rz-outline-button">Open full map ${icon('arrow')}</a></div>
-    <p class="rz-help">Profile pins show a city center, not an exact position. Device location is used by OpenStreetMap to display this map. Only 'Share in this chat' sends it to a conversation.</p>
-    <button id="shareLocation" class="rz-outline-button" style="margin-top:12px" hidden>${icon('message')}Share in this chat</button><div id="mapProfiles" style="margin-top:16px"></div></section>`);
-  let locationGeneration = 0;
-  function showMap(point, own = false) {
-    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon) || Math.abs(point.lat) > 90 || Math.abs(point.lon) > 180) return;
-    const lat = +point.lat.toFixed(3), lon = +point.lon.toFixed(3), delta = own ? .015 : .045;
-    const bounds = [Math.max(-180,lon-delta),Math.max(-90,lat-delta),Math.min(180,lon+delta),Math.min(90,lat+delta)].join(',');
-    $('locationMap').src = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&layer=mapnik&marker=${lat}%2C${lon}`;
-    $('externalMap').href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
-    $('locationStatus').textContent = own ? 'Your approximate area. It has not been shared with anyone.' : `Exploring ${point.name}. City-level location only.`;
-    $('shareLocation').hidden = !own || !chatOpen || !chatProfileId;
-    const list = $('mapProfiles'); list.replaceChildren();
-    PROFILES.filter(p => !own && p.location?.toLowerCase().includes(point.match)).forEach(p => {
-      const row = document.createElement('div'); row.className = 'rz-location-profile';
-      row.innerHTML = `<img src="${escapeHtml(safeImageUrl(p.image))}" alt=""><div><strong>${escapeHtml(p.name)}</strong><p>${escapeHtml(p.location)}</p></div><button type="button">View profile</button>`;
-      row.querySelector('button').onclick = () => { maps.close(); openProfileScreenById(p.id); }; list.appendChild(row);
-    });
-  }
-  function openMap(profile) {
-    const place = profile?.location?.toLowerCase() || '';
-    const index = cities.findIndex(city => place.includes(city.match));
-    maps.open();
-    if (profile && index < 0) {
-      $('locationMap').removeAttribute('src'); $('mapProfiles').replaceChildren(); $('shareLocation').hidden = true;
-      $('locationStatus').textContent = `${profile.location || 'This profile'} has no mapped city yet. Choose a city above or search the full map.`;
-      $('externalMap').href = 'https://www.openstreetmap.org/search?query=' + encodeURIComponent(profile.location || ''); return;
-    }
-    $('mapCity').value = String(index < 0 ? 0 : index);
-    showMap(cities[index < 0 ? 0 : index]);
-  }
-  $('mapCity').onchange = () => { locationGeneration++; const value = $('mapCity').value; showMap(value === 'mine' && location ? location : cities[Number(value)], value === 'mine'); };
-  $('useLocation').onclick = () => {
-    if (!navigator.geolocation) return toast('Your browser does not support location. Choose a city instead.');
-    const version = ++locationGeneration; $('useLocation').disabled = true; $('locationStatus').textContent = 'Waiting for location permission…';
-    navigator.geolocation.getCurrentPosition(position => {
-      $('useLocation').disabled = false; if (version !== locationGeneration) return;
-      location = {lat:position.coords.latitude, lon:position.coords.longitude, name:'Your area'};
-      $('mapCity').querySelector('[value="mine"]').hidden = false; $('mapCity').value = 'mine';
-      $('clearLocation').hidden = false; $('topLocationLabel').textContent = 'Location set'; showMap(location, true);
-    }, error => {
-      $('useLocation').disabled = false; if (version !== locationGeneration) return;
-      $('locationStatus').textContent = error.code === 1 ? 'Location access was denied. You can still choose a city.' : 'Could not find your location. Choose a city or try again.';
-    }, {enableHighAccuracy:false, timeout:12000, maximumAge:60000});
-  };
-  $('clearLocation').onclick = () => {
-    locationGeneration++; location = null; $('clearLocation').hidden = true; $('shareLocation').hidden = true;
-    $('mapCity').querySelector('[value="mine"]').hidden = true; $('mapCity').value = '0'; $('topLocationLabel').textContent = 'Explore locations'; showMap(cities[0]);
-  };
-  $('shareLocation').onclick = async () => {
-    if (!location || !chatOpen || !chatProfileId) return toast('Open a matched conversation before sharing your location.');
-    const initial = {latitude:location.lat,longitude:location.lon};
-    maps.close(); window.RizzumeLocations.open(initial);
-  };
-
   const preferences = dialog('discoveryPreferences', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><h2>Your kind of connection</h2><p>Filter by skills, role, name, or city.</p></div><button data-close class="rz-icon-button" aria-label="Close preferences">${icon('close')}</button></div><form id="discoveryForm"><label for="discoverySearch">What are you looking for?<input id="discoverySearch" maxlength="100" placeholder="Try React, backend, or Manila" autocomplete="off"></label><div class="rz-dialog-actions"><button class="rz-primary" type="submit">Apply preferences</button><button class="rz-outline-button" id="clearPreferences" type="button">Reset</button></div></form><p class="rz-help">Preferences filter this discovery deck. Your saved matches stay available.</p></section>`);
   $('discoveryFilters').onclick = () => preferences.open();
   function applyPreferences() {
@@ -400,7 +334,6 @@
     if (target === 'swipe' || target === 'directory') startMode(target);
     if (target === 'matches') toggleMatchesDrawer(true);
     if (target === 'messages') openChat();
-    if (target === 'location') openMap();
     if (target === 'notifications') openNotifications();
   }
   window.RizzumeExperience = {
@@ -415,7 +348,7 @@
       document.querySelectorAll('[data-nav]').forEach(button => { if (button.dataset.nav === mode) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
       syncFloatingProfileButton();
     },
-    refresh: refreshSidebar, openMap
+    refresh: refreshSidebar
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden && ready && !polling) poll(); });
   window.addEventListener('pagehide', () => {clearTimeout(pollTimer);stopCallPolling();});
