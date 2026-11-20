@@ -14,6 +14,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="bastos-pass.css?v=20261121-1">
 
   <style>
     .id-perspective { perspective: 1200px; }
@@ -93,8 +94,8 @@
             </p>
           </div>
 
-          <!-- Official Digital ID & QR Button -->
-          <button type="button" onclick="openIdModal()" title="View Official Digital ID & QR" aria-label="View Official Digital ID and QR Code" class="shrink-0 px-3 py-2 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 backdrop-blur-md border border-white/25 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all">
+          <!-- Bastos Pass & QR Button -->
+          <button type="button" onclick="openIdModal()" title="View Bastos Pass & QR" aria-label="View Bastos Pass and QR Code" class="shrink-0 px-3 py-2 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 backdrop-blur-md border border-white/25 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-lg transition-all">
             <i data-lucide="id-card" class="w-4 h-4 text-cyan-300"></i>
             <span>ID</span>
           </button>
@@ -183,12 +184,12 @@
     </section>
   </main>
 
-  <!-- OFFICIAL DIGITAL ID & QR MODAL -->
+  <!-- BASTOS PASS & QR MODAL -->
   <div id="officialIdModal" onclick="if (event.target === this) closeIdModal()" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
     <div id="officialIdModalBox" class="w-full max-w-lg bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-pink-100 transform scale-95 transition-transform duration-300 space-y-4">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Official Digital ID</h2>
+          <h2 class="text-xs font-black uppercase tracking-wider text-zinc-400">Bastos Pass</h2>
           <p class="text-[11px] text-zinc-500">Tap card to flip Front &amp; Back</p>
         </div>
         <div class="flex items-center gap-2">
@@ -196,7 +197,7 @@
             <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
             <span>Flip ID</span>
           </button>
-          <button type="button" onclick="closeIdModal()" aria-label="Close Official Digital ID" class="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center transition-colors">
+          <button type="button" onclick="closeIdModal()" aria-label="Close Bastos Pass" class="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center transition-colors">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
         </div>
@@ -217,7 +218,7 @@
                 </div>
                 <div>
                   <p class="text-xs font-black tracking-tight leading-none">
-                    <span class="text-tinder-pink">Rizz</span><span class="text-sky-400">u</span><span class="text-purple-400">me</span> DEV PASS
+                    <span class="text-tinder-pink">Rizz</span><span class="text-sky-400">u</span><span class="text-purple-400">me</span> Bastos Pass
                   </p>
                   <p class="text-[9px] uppercase tracking-widest text-zinc-400 mt-0.5">Republic of Code • Manila, PH</p>
                 </div>
@@ -227,7 +228,7 @@
               </span>
             </div>
 
-            <div class="flex items-center gap-4 my-auto py-2 relative z-10">
+            <div class="id-owner-row flex items-center gap-4 my-auto py-2 relative z-10">
               <img src="images/greg.jpg" alt="DAPOG, John Greg" crossorigin="anonymous" class="w-20 h-24 rounded-xl object-cover border-2 border-tinder-pink shadow-md shrink-0" />
               <div class="min-w-0 flex-1 space-y-1">
                 <span class="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-tinder-pink/20 text-pink-300 border border-pink-400/30">
@@ -242,6 +243,7 @@
                   <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-zinc-200">Docker</span>
                 </div>
               </div>
+            <dl class="bastos-demographics" aria-label="Age and sex"><div><dt>AGE</dt><dd data-id-age>22</dd></div><div><dt>SEX</dt><dd data-id-sex>pag gabi pa</dd></div></dl>
             </div>
 
             <div class="flex items-center justify-between text-[9px] text-zinc-400 border-t border-white/10 pt-2 relative z-10">
@@ -450,7 +452,7 @@
 
       const link = document.createElement('a');
       link.href = canvas.toDataURL('image/png');
-      link.download = `${baseName}_Rizzume_ID_${isFlipped ? 'BACK' : 'FRONT'}.png`;
+      link.download = `${baseName}_Bastos_Pass_${isFlipped ? 'BACK' : 'FRONT'}.png`;
       link.click();
     }
 
@@ -474,11 +476,11 @@
       const baseName = document.title.split('•')[0].trim().replace(/[^a-z0-9]/gi, '_');
       const link = document.createElement('a');
       link.href = combined.toDataURL('image/png');
-      link.download = `${baseName}_Rizzume_Full_ID.png`;
+      link.download = `${baseName}_Bastos_Pass_Front_and_Back.png`;
       link.click();
     }
   </script>
   <script src="account.js"></script>
-  <script src="profile.js?v=20261121-1"></script>
+  <script src="profile.js?v=20261121-2"></script>
 </body>
 </html>
