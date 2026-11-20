@@ -75,7 +75,70 @@
     <!-- Hero profile card -->
     <section class="rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden">
       <div class="relative w-full aspect-[4/4.4] bg-zinc-900">
-        <img src="images/justin.jpg" alt="VILLANUEVA, Justin" class="w-full h-full object-cover" />
+        <canvas id="morphCanvas" class="w-full h-full object-cover"></canvas>
+        <script>
+          const canvas = document.getElementById('morphCanvas');
+          const ctx = canvas.getContext('2d');
+          const imgJustin = new Image();
+          const imgObama = new Image();
+          imgJustin.src = 'images/justin.jpg';
+          imgObama.src = 'images/250px-President_Barack_Obama_(square).jpg';
+          imgJustin.crossOrigin = 'anonymous';
+          imgObama.crossOrigin = 'anonymous';
+
+          let loaded = 0;
+          function checkLoaded() {
+            loaded++;
+            if (loaded === 2) startAnimation();
+          }
+          imgJustin.onload = checkLoaded;
+          imgObama.onload = checkLoaded;
+
+          function startAnimation() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            let progress = 0;
+
+            function animate() {
+              ctx.drawImage(imgJustin, 0, 0, canvas.width, canvas.height);
+              let justinData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = canvas.width;
+              tempCanvas.height = canvas.height;
+              const tempCtx = tempCanvas.getContext('2d');
+              tempCtx.drawImage(imgObama, 0, 0, canvas.width, canvas.height);
+              let obamaData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+              let outputData = ctx.createImageData(canvas.width, canvas.height);
+
+              // Increase progress until it reaches 1 (fully Obama)
+              progress += 0.002;
+              if (progress > 1) progress = 1;
+
+              for (let i = 0; i < justinData.data.length; i += 4) {
+                if (Math.random() < progress) {
+                  outputData.data[i] = obamaData.data[i];
+                  outputData.data[i+1] = obamaData.data[i+1];
+                  outputData.data[i+2] = obamaData.data[i+2];
+                  outputData.data[i+3] = obamaData.data[i+3];
+                } else {
+                  outputData.data[i] = justinData.data[i];
+                  outputData.data[i+1] = justinData.data[i+1];
+                  outputData.data[i+2] = justinData.data[i+2];
+                  outputData.data[i+3] = justinData.data[i+3];
+                }
+              }
+              ctx.putImageData(outputData, 0, 0);
+
+              // Only continue animating if we're not fully Obama yet
+              if (progress < 1) {
+                requestAnimationFrame(animate);
+              }
+            }
+            animate();
+          }
+        </script>
         <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent"></div>
         <span class="absolute top-4 left-4 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>Open for Projects
@@ -116,7 +179,7 @@
     <!-- Why match -->
     <section class="bg-rose-50/70 rounded-3xl p-5 border border-rose-100/70 space-y-1.5">
       <h2 class="text-xs font-black uppercase tracking-wider text-tinder-pink">Why You Should Match</h2>
-      <p class="text-xs text-zinc-700 font-medium">✅ Obsessed with 60 FPS mobile touch physics</p>
+      <p class="text-xs text-zinc-700 font-medium">✅ Obsessed with Online Multiplayer Games</p>
       <p class="text-xs text-zinc-700 font-medium">✅ Never ships an unstyled form element</p>
       <p class="text-xs text-zinc-700 font-medium">✅ Pixel-precise design parity</p>
     </section>
@@ -267,7 +330,7 @@
                   This digital credential certifies <strong class="text-white">Justin Villanueva</strong> as a verified Rizzume software engineer.
                 </p>
                 <div class="text-[10px] text-zinc-400 space-y-0.5 pt-1 font-mono">
-                  <p class="truncate">MAIL: villanueva.justin@example.com</p>
+                  <p class="truncate">MAIL: villanuevajustin270@gmail.com</p>
                   <p class="truncate">BASE: Manila, Philippines</p>
                 </div>
               </div>
