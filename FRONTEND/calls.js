@@ -72,7 +72,14 @@
     get busy() { return !!this.run; }
     path(r) { return (this.team ? '/team/calls/' : '/me/calls/') + encodeURIComponent(r.id); }
     status(text) { this.$('callStatus').textContent = text; this.$('callPlaceholderText').textContent = text; }
-    async prepare(name, {video=true}={}) {
+    async getConfig() {
+      if (this.config && Date.now()-this.configAt<60000) return this.config;
+      if (!this.configRequest) this.configRequest=this.request(this.team?'/team/call-config':'/me/call-config')
+        .then(config=>{this.config=config;this.configAt=Date.now();return config;}).finally(()=>{this.configRequest=null;});
+      return this.configRequest;
+    }
+    warmup() { return this.getConfig().catch(()=>{}); }
+    async prepare(name, {video=true,incomingId=null}={}) {
       if (this.run) throw new Error('Finish your current call first.');
       const r = {id: null, pc: null, stream: null, timer: null, cancelled: false, seen: new Set(), queue: [], sending: Promise.resolve(), failures: 0};
       this.run = r; this.$('callError').textContent = ''; this.$('callPlaceholder').hidden = false;
@@ -92,19 +99,33 @@
       try {
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection)
           throw new Error('Video calling requires HTTPS or localhost and a browser with camera support.');
-        const config = await this.request(this.team ? '/team/call-config' : '/me/call-config');
+        // Observe offer errors immediately, even if configuration is still loading.
+        const invitationResult=incomingId ? this.request(this.path({id:incomingId}))
+          .then(value=>({value}),error=>({error})) : Promise.resolve({value:null});
+        const config=await this.getConfig();
         if (r.cancelled) return null;
         if (config.callingEnabled === false) throw new Error('Video calls are not configured yet. Send a message while the team sets up its workspace.');
-        let stream;
-        try {stream = await navigator.mediaDevices.getUserMedia({video:video?{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}}:false,audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
-        catch(error){
-          if(!video || error.name!=='NotFoundError' || r.cancelled)throw error;
-          stream=await navigator.mediaDevices.getUserMedia({video:false,audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-          this.$('callError').textContent='No camera found. You can continue with a voice call.';
-        }
-        if (r.cancelled) { stream.getTracks().forEach(t => t.stop()); return null; }
-        r.stream = stream; this.$('localVideo').srcObject = stream;
-        r.pc = new RTCPeerConnection({iceServers: config.iceServers});
+        // Gather network candidates while device permission and startup finish.
+        r.pc = new RTCPeerConnection({iceServers:config.iceServers,iceCandidatePoolSize:2});
+        const media=(async()=>{
+          let stream;
+          try {stream=await navigator.mediaDevices.getUserMedia({video:video?{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}}:false,audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
+          catch(error){
+            if(!video || error.name!=='NotFoundError' || r.cancelled)throw error;
+            stream=await navigator.mediaDevices.getUserMedia({video:false,audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+            this.$('callError').textContent='No camera found. You can continue with a voice call.';
+          }
+          if(r.cancelled){stream.getTracks().forEach(track=>track.stop());return null;}
+          r.stream=stream;return stream;
+        })();
+        // Device startup and a slow offer fetch can now finish independently.
+        const [stream,invitation]=await Promise.all([media,invitationResult.then(result=>{
+          if(result.error)throw result.error;
+          if(result.value && result.value.state !== 'ringing')throw new Error('This invitation has already ended or was answered in another tab.');
+          return result.value;
+        })]);
+        if(r.cancelled || !stream)return null;
+        r.invitation=invitation;this.$('localVideo').srcObject=stream;
         stream.getTracks().forEach(track => {
           const sender=r.pc.addTrack(track, stream);if(track.kind==='video')r.videoSender=sender;else if(track.kind==='audio')r.audioSender=sender;
           this.watchTrack(r,track);
@@ -153,56 +174,80 @@
         r.id = call.id;
         if (r.cancelled) { await this.request(this.path(r) + '/action', 'POST', {action: 'end'}); return; }
         this.status('Calling ' + name + '… Waiting for them to answer.');
-        this.flush(r); this.poll(r);
+        this.flush(r,true); this.poll(r);
       } catch (error) { this.fail(r, error); }
     }
     async accept(id, name, options) {
       if (this.busy) return toast('Finish your current call first.');
-      const r = await this.prepare(name,options); if (!r) return;
+      const r = await this.prepare(name,{...options,incomingId:id}); if (!r) return;
       r.id = id;
       try {
-        const call = await this.request(this.path(r)); if (r.cancelled) return;
+        const call = r.invitation; if (r.cancelled) return;
         if (call.state !== 'ringing') throw new Error('This invitation has already ended or was answered in another tab.');
         await r.pc.setRemoteDescription({type: 'offer', sdp: call.offer}); if (r.cancelled) return;
         await r.pc.setLocalDescription(await r.pc.createAnswer()); if (r.cancelled) return;
-        await this.request(this.path(r) + '/action', 'POST', {action: 'accept', answer: r.pc.localDescription.sdp});
+        const accepted=await this.request(this.path(r) + '/action', 'POST', {action: 'accept', answer: r.pc.localDescription.sdp});
         if (r.cancelled) return;
-        this.status('Connecting…'); this.flush(r); this.poll(r);
-      } catch (error) { this.fail(r, error); }
+        r.accepted=true;
+        this.status('Connecting…'); this.flush(r,true);
+        await this.applySignals(r,accepted.signals || []);
+        this.poll(r);
+      } catch (error) {
+        // An invitation answered in another tab must not be ended by this tab.
+        if (error.status === 409 && !r.accepted) r.id=null;
+        this.fail(r, error);
+      }
     }
-    flush(r) {
-      if (!r.id || r.cancelled) return;
-      for (const candidate of r.queue.splice(0)) {
-        r.sending = r.sending.then(async () => {
-          if (!r.cancelled) await this.request(this.path(r) + '/candidates', 'POST', {payload: JSON.stringify(candidate)});
-        }).catch(error => { if (!r.cancelled) this.fail(r, error); });
+    flush(r,immediate=false) {
+      if (!r.id || r.cancelled || r.flushing || !r.queue.length) return;
+      if (!immediate) {
+        if (!r.flushTimer) r.flushTimer=setTimeout(()=>{r.flushTimer=null;this.flush(r,true);},20);
+        return;
+      }
+      clearTimeout(r.flushTimer);r.flushTimer=null;r.flushing=true;
+      const payloads=r.queue.splice(0,20).map(candidate=>JSON.stringify(candidate));
+      r.sending=this.request(this.path(r)+'/candidates','POST',{payloads})
+        .catch(error=>{if(!r.cancelled)this.fail(r,error);})
+        .finally(()=>{r.flushing=false;this.flush(r);});
+    }
+    async applySignals(r,signals) {
+      if (!r.pc.remoteDescription) return;
+      for (const signal of signals) {
+        if (r.cancelled) return;
+        if (!r.seen.has(signal.id)) {
+          await r.pc.addIceCandidate(JSON.parse(signal.payload));
+          r.seen.add(signal.id);r.afterSignalId=Math.max(r.afterSignalId || 0,signal.id);
+        }
       }
     }
     async poll(r) {
-      if (r.cancelled) return;
+      if (r.cancelled || r.polling) return;
+      clearTimeout(r.timer);r.polling=true;
+      let delay=500;
       try {
-        const call = await this.request(this.path(r)); if (r.cancelled) return;
+        const call = await this.request(this.path(r)+(r.afterSignalId?'?afterSignalId='+r.afterSignalId:'')); if (r.cancelled) return;
         if (!['ringing', 'accepted'].includes(call.state)) {
           this.release(r); this.status(call.state === 'declined' ? 'Call declined. You can send a message instead.' : call.state === 'missed' ? 'No answer. Missed call saved in your conversation.' : 'Call ended.'); return;
         }
         if (call.answer && !r.pc.remoteDescription) { await r.pc.setRemoteDescription({type: 'answer', sdp: call.answer}); this.status('Connecting…'); }
         if (r.cancelled) return;
-        if (r.pc.remoteDescription) for (const signal of call.signals) {
-          if (r.cancelled) return;
-          if (!r.seen.has(signal.id)) { await r.pc.addIceCandidate(JSON.parse(signal.payload)); r.seen.add(signal.id); }
-        }
+        await this.applySignals(r,call.signals || []);
         if (call.state === 'accepted') {
           r.connectStarted ||= Date.now();
-          if (r.pc.connectionState !== 'connected' && Date.now() - r.connectStarted > 45000)
+          if (!r.connectedAt && r.pc.connectionState !== 'connected' && Date.now() - r.connectStarted > 45000)
             throw Object.assign(new Error('The media connection timed out. Try another network or ask the team to configure a relay server.'), {status:408});
         }
         r.failures = 0;
+        delay=r.pc.connectionState === 'connected'?5000:call.state === 'accepted'?250:500;
       } catch (error) {
         if (r.cancelled) return;
         if (++r.failures >= 3 || [401,403,404,408].includes(error.status)) return this.fail(r, error);
+        delay=Math.min(5000,1500*2**(r.failures-1));
         this.status('Reconnecting to the call service…');
+      } finally {
+        r.polling=false;
+        if (!r.cancelled) r.timer=setTimeout(()=>this.poll(r),delay);
       }
-      if (!r.cancelled) r.timer = setTimeout(() => this.poll(r), 1500);
     }
     selectFilterCategory(group) {
       this.modal.el.querySelectorAll?.('[data-call-filter-category]').forEach(button=>{
@@ -460,7 +505,7 @@
       this.syncControls(r);
     }
     release(r) {
-      r.cancelled = true; clearTimeout(r.timer);clearTimeout(r.durationTimer);r.pendingFilter?.stop();r.pendingFilter=null; r.filters?.stop();r.filters=null; r.stream?.getTracks().forEach(t => t.stop());
+      r.cancelled = true; clearTimeout(r.timer);clearTimeout(r.flushTimer);clearTimeout(r.durationTimer);r.pendingFilter?.stop();r.pendingFilter=null; r.filters?.stop();r.filters=null; r.stream?.getTracks().forEach(t => t.stop());
       r.stateChannel?.close();r.pc?.close();
       if (this.run === r) {
         this.run = null; this.$('localVideo').srcObject = null; this.$('remoteVideo').srcObject = null;

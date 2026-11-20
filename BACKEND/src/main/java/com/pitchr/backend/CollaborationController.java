@@ -38,7 +38,7 @@ public class CollaborationController {
         @RequestHeader(value = "X-Team-Key", required = false) String key,
         @CookieValue(name = PortfolioController.COOKIE, required = false) String token) {
         if (request.getRequestURI().contains("/team/")) access.requireTeamKey(key);
-        else service.active(token, null, false);
+        else service.authorizeCalling(token);
         List<Map<String, Object>> servers = new ArrayList<>();
         servers.add(Map.of("urls", "stun:stun.l.google.com:19302"));
         if (!turnUrl.isBlank()) servers.add(Map.of("urls", turnUrl, "username", turnUser, "credential", turnPassword));
@@ -62,8 +62,9 @@ public class CollaborationController {
     @GetMapping({"/me/calls/{id}", "/team/calls/{id}"})
     public CollaborationService.CallView get(@PathVariable String id, jakarta.servlet.http.HttpServletRequest request,
         @CookieValue(name = PortfolioController.COOKIE, required = false) String token,
-        @RequestHeader(value = "X-Team-Key", required = false) String key) {
-        return service.get(token, id, team(request, key));
+        @RequestHeader(value = "X-Team-Key", required = false) String key,
+        @RequestParam(defaultValue = "0") long afterSignalId) {
+        return service.get(token, id, team(request, key), Math.max(0,afterSignalId));
     }
     @PostMapping({"/me/calls/{id}/action", "/team/calls/{id}/action"})
     public CollaborationService.CallView action(@PathVariable String id, jakarta.servlet.http.HttpServletRequest request,
@@ -75,7 +76,9 @@ public class CollaborationController {
     public ResponseEntity<Void> candidate(@PathVariable String id, jakarta.servlet.http.HttpServletRequest request,
         @CookieValue(name = PortfolioController.COOKIE, required = false) String token,
         @RequestHeader(value = "X-Team-Key", required = false) String key, @Valid @RequestBody CandidateRequest body) {
-        service.candidate(token, id, team(request, key), body.payload()); return ResponseEntity.noContent().build();
+        if (body.payload() != null && body.payloads() != null) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"Send payload or payloads, not both");
+        List<String> batch=body.payloads() != null ? body.payloads() : body.payload() == null ? List.of() : List.of(body.payload());
+        service.candidates(token, id, team(request, key), batch); return ResponseEntity.noContent().build();
     }
     private boolean team(jakarta.servlet.http.HttpServletRequest request, String key) {
         boolean team = request.getRequestURI().contains("/team/");
@@ -84,5 +87,6 @@ public class CollaborationController {
     public record ReadRequest(@PositiveOrZero long throughId) {}
     public record StartRequest(@NotBlank @Size(max=255) String profileId, @NotBlank @Size(max=16000) String offer) {}
     public record ActionRequest(@NotBlank @Pattern(regexp="accept|decline|end") String action, @Size(max=16000) String answer) {}
-    public record CandidateRequest(@NotBlank @Size(max=4000) String payload) {}
+    public record CandidateRequest(@Size(max=4000) String payload,
+        @Size(min=1,max=20) List<@NotBlank @Size(max=4000) String> payloads) {}
 }

@@ -38,6 +38,7 @@ public class CollaborationService {
         n.kind = kind; n.body = body; n.createdAt = Instant.now(); notifications.save(n);
     }
     void revokeCalls(String session, String profile) { calls.revoke(session, profile); }
+    public void authorizeCalling(String token) { accounts.requireAccount(token); }
 
     public Map<String, Object> notifications(String token) {
         String session = session(token, false).id;
@@ -85,12 +86,12 @@ public class CollaborationService {
                 c.state, c.createdAt,!team && c.profileId.equals(own))).toList();
     }
 
-    public CallView get(String token, String id, boolean team) {
+    public CallView get(String token, String id, boolean team, long afterSignalId) {
         Access access=authorized(token,id,team); VideoCall c=access.call(); team=access.receiver(); expire(c);
         if (ACTIVE.contains(c.state)) {
             if (team) c.teamHeartbeat = Instant.now(); else c.visitorHeartbeat = Instant.now();
         }
-        return view(c, team ? "team" : "visitor");
+        return view(c, team ? "team" : "visitor", afterSignalId);
     }
 
     public CallView action(String token, String id, boolean team, String action, String answer) {
@@ -113,16 +114,19 @@ public class CollaborationService {
         return view(c, team ? "team" : "visitor");
     }
 
-    public void candidate(String token, String id, boolean team, String payload) {
+    public void candidates(String token, String id, boolean team, List<String> payloads) {
         Access access=authorized(token,id,team); VideoCall c=access.call(); team=access.receiver(); expire(c);
         if (!ACTIVE.contains(c.state)) throw failure(HttpStatus.CONFLICT, "Call has ended");
-        try {
+        if (payloads.isEmpty() || payloads.size()>20) throw failure(HttpStatus.BAD_REQUEST, "Send between 1 and 20 ICE candidates");
+        for (String payload : payloads) try {
             var value = json.readTree(payload);
             if (!value.isObject() || !value.has("candidate") || !value.get("candidate").isString()) throw new IllegalArgumentException();
         } catch (Exception e) { throw failure(HttpStatus.BAD_REQUEST, "Invalid ICE candidate"); }
         String sender = team ? "team" : "visitor";
-        if (signals.countByCallIdAndSender(id, sender) >= 80) throw failure(HttpStatus.TOO_MANY_REQUESTS, "ICE candidate limit reached");
-        CallSignal s = new CallSignal(); s.callId = id; s.sender = sender; s.payload = payload; signals.save(s);
+        if (signals.countByCallIdAndSender(id, sender)+payloads.size() > 80) throw failure(HttpStatus.TOO_MANY_REQUESTS, "ICE candidate limit reached");
+        signals.saveAll(payloads.stream().map(payload -> {
+            CallSignal s = new CallSignal(); s.callId = id; s.sender = sender; s.payload = payload; return s;
+        }).toList());
     }
 
     private Access authorized(String token, String id, boolean team) {
@@ -136,8 +140,11 @@ public class CollaborationService {
     }
 
     private CallView view(VideoCall c, String sender) {
+        return view(c,sender,0);
+    }
+    private CallView view(VideoCall c, String sender, long afterSignalId) {
         return new CallView(c.id, c.profileId, c.state, c.offer, c.answer, c.createdAt,
-            signals.findByCallIdAndSenderNotOrderByIdAsc(c.id, sender).stream().map(s -> new Signal(s.id, s.payload)).toList());
+            signals.findByCallIdAndSenderNotAndIdGreaterThanOrderByIdAsc(c.id, sender,afterSignalId).stream().map(s -> new Signal(s.id, s.payload)).toList());
     }
     private void expire(VideoCall c) { history.refresh(c); }
     private void validateSdp(String sdp) {

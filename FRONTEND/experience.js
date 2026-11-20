@@ -367,7 +367,7 @@
     } catch (_) { /* A transient refresh failure must not dismiss a ringing invitation. */ }
     finally {
       callPolling=false;
-      if (callsEnabled) callPollTimer=setTimeout(()=>pollIncomingCalls(),document.hidden?4000:2500);
+      if (callsEnabled) callPollTimer=setTimeout(()=>pollIncomingCalls(),document.hidden?2000:1000);
     }
   }
   $('chatVideoButton').onclick = () => {
@@ -378,6 +378,10 @@
     if(chatProfileId && matchedProfiles.some(p=>p.id===chatProfileId))room.start(chatProfileId,chatProfileName,{video:false});
     else toast('Open a connected conversation to start a voice call.');
   };
+  for (const id of ['chatVideoButton','chatAudioButton']) {
+    $(id)?.addEventListener('pointerenter',()=>room.warmup());
+    $(id)?.addEventListener('focus',()=>room.warmup());
+  }
   $('chatMapButton').onclick = () => window.RizzumeLocations.open();
   $('chatListButton').onclick = () => showConversationList();
   function refreshSidebar() {
@@ -400,6 +404,7 @@
     if (target === 'notifications') openNotifications();
   }
   window.RizzumeExperience = {
+    prepareCall:()=>room.warmup(),
     refreshAccount,
     stop() { clearTimeout(pollTimer); stopCallPolling(); room.hangup(); },
     resume() { if (backendAvailable) {if (!polling) poll();startCallPolling();} },

@@ -53,7 +53,7 @@
         $('incomingCalls').appendChild(row);
       }
     } catch (error) { if (run === version) $('teamCallStatus').textContent = 'Call updates unavailable. ' + error.message; }
-    if (run === version) timer = setTimeout(() => poll(snapshot, run), 4000);
+    if (run === version) timer = setTimeout(() => poll(snapshot, run), room?.busy?5000:1000);
   }
   window.RizzumeTeamCalls = {
     reset() {

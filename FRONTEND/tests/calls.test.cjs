@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function setup(options = {}) {
-  const elements = new Map(), requests = [], timers = new Map(); let nextTimer = 0;
+  const elements = new Map(), requests = [], timers = new Map(), delays = new Map(); let nextTimer = 0;
   const tracks = ['audio','video'].map(kind => ({kind, enabled:true, stopped:false, stop() {this.stopped=true;}}));
   const stream = {getTracks:() => tracks};
   const peer = {closed:false, added:[], remoteDescription:null, localDescription:null, addTrack(track) {return track.kind==='video' ? options.videoSender : options.audioSender;}, addTransceiver(){return {sender:options.videoSender};}, close() {this.closed=true;},
@@ -21,8 +21,8 @@ function setup(options = {}) {
       },querySelectorAll:()=>[]}, open() {}, close() {onClose();}};}}},
     navigator:{mediaDevices:{getUserMedia:options.media || (async () => stream),enumerateDevices:options.enumerate}},
     document:{createElement:()=>element(),addEventListener(){},removeEventListener(){}},
-    RTCPeerConnection:function() {return peer;},
-    setTimeout(fn) {timers.set(++nextTimer,fn);return nextTimer;}, clearTimeout(id) {timers.delete(id);},
+    RTCPeerConnection:function(config) {peer.config=config;return peer;},
+    setTimeout(fn,delay) {timers.set(++nextTimer,fn);delays.set(nextTimer,delay);return nextTimer;}, clearTimeout(id) {timers.delete(id);delays.delete(id);},
     MediaStream: function(tracks=[]) {this.getTracks=()=>tracks;this.getVideoTracks=()=>tracks.filter(t=>t.kind==='video');this.getAudioTracks=()=>tracks.filter(t=>t.kind==='audio');this.addTrack=track=>tracks.push(track);},
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../calls.js'),'utf8'),context);
@@ -35,7 +35,7 @@ function setup(options = {}) {
     return {...call};
   }
   const room = new context.window.RizzumeVideoRoom({request,team:!!options.team});
-  return {room, elements, requests, peer, tracks, timers, stream,context,setCall(value) {call={...call,...value};}};
+  return {room, elements, requests, peer, tracks, timers, delays, stream,context,setCall(value) {call={...call,...value};}};
 }
 
 test('call starts with an offer and releases all devices on hangup', async () => {
@@ -52,6 +52,112 @@ test('camera permission denial never creates a remote call', async () => {
   await s.room.start('ada','Ada');
   assert.equal(s.room.busy,false); assert.equal(s.requests.some(r=>r.url==='/me/calls'),false);
   assert.match(s.elements.get('#callError').textContent,/permission was denied/);
+});
+
+test('call configuration prefetch is shared with setup, cached briefly and retryable',async()=>{
+  let finish,fail=false;
+  const s=setup({request:async url=>{
+    if(url.endsWith('call-config')){if(fail)throw Error('Offline');return new Promise(resolve=>{finish=resolve;});}
+    return {id:'a',state:'ringing',signals:[]};
+  }});
+  const first=s.room.warmup(),second=s.room.warmup();
+  assert.equal(s.requests.length,1);finish({iceServers:[],relayConfigured:true});await Promise.all([first,second]);
+  await s.room.start('ada','Ada');await tick();
+  assert.equal(s.requests.filter(r=>r.url.endsWith('call-config')).length,1);s.room.hangup();
+  s.room.configAt=Date.now()-60001;fail=true;await s.room.warmup();
+  fail=false;const retry=s.room.warmup();finish({iceServers:[],relayConfigured:true});await retry;
+  assert.equal(s.requests.filter(r=>r.url.endsWith('call-config')).length,3);
+});
+
+test('answer fetches the offer with configuration and pools ICE before camera startup',async()=>{
+  let configReady,mediaReady;
+  const invitation={id:'a',state:'ringing',offer:'v=0\r\n',signals:[]};
+  const s=setup({request:async(url,method,body)=>{
+    if(url.endsWith('call-config'))return new Promise(resolve=>configReady=resolve);
+    if(body?.action==='accept')return {...invitation,state:'accepted'};
+    return invitation;
+  },media:()=>new Promise(resolve=>mediaReady=resolve)});
+  const answer=s.room.accept('a','Ada');await tick();
+  assert.equal(s.requests.length,2);assert.equal(mediaReady,undefined);
+  assert.deepEqual(s.requests.map(request=>request.url).sort(),['/me/call-config','/me/calls/a']);
+  configReady({iceServers:[],relayConfigured:true});await tick();
+  assert.equal(s.peer.config.iceCandidatePoolSize,2);assert.equal(typeof mediaReady,'function');
+  assert.equal(s.requests.filter(r=>r.url==='/me/calls/a').length,1);
+  mediaReady(s.stream);await answer;await tick();s.room.hangup();
+});
+
+test('a slow invitation does not hold up device startup',async()=>{
+  let offerReady;
+  const s=setup({request:async(url,method,body)=>{
+    if(url.endsWith('call-config'))return {iceServers:[],relayConfigured:true};
+    if(url==='/me/calls/a' && !body)return new Promise(resolve=>offerReady=resolve);
+    return {state:body?.action==='accept'?'accepted':'ended',signals:[]};
+  }});
+  const answer=s.room.accept('a','Ada');await tick();
+  assert.equal(s.room.run.stream,s.stream);assert.equal(s.peer.config.iceCandidatePoolSize,2);
+  assert.equal(s.requests.some(req=>req.body?.action==='accept'),false);
+  offerReady({state:'ringing',offer:'v=0\r\n',signals:[]});await answer;s.room.hangup();
+});
+
+test('an offer failure releases pooled ICE and stops a camera that finishes late',async()=>{
+  let mediaReady;
+  const s=setup({media:()=>new Promise(resolve=>mediaReady=resolve),request:async url=>{
+    if(url.endsWith('call-config'))return {iceServers:[],relayConfigured:true};
+    throw Object.assign(Error('Call ended'),{status:404});
+  }});
+  await s.room.accept('a','Ada');assert.equal(s.room.busy,false);assert.equal(s.peer.closed,true);
+  mediaReady(s.stream);await tick();assert.ok(s.tracks.every(track=>track.stopped));
+  assert.equal(s.requests.some(req=>req.body?.action==='accept'),false);
+});
+
+test('ICE bursts use bounded batches and cancelling clears pending candidates',async()=>{
+  const s=setup();await s.room.start('ada','Ada');await tick();const r=s.room.run;
+  for(let i=0;i<41;i++)s.peer.onicecandidate({candidate:{toJSON:()=>({candidate:'candidate:'+i})}});
+  assert.equal(s.requests.filter(req=>req.url.endsWith('/candidates')).length,0);
+  for(let i=0;i<3;i++){s.timers.get(r.flushTimer)();await r.sending;}
+  const batches=s.requests.filter(req=>req.url.endsWith('/candidates'));
+  assert.deepEqual(batches.map(req=>req.body.payloads.length),[20,20,1]);
+  assert.equal(new Set(batches.flatMap(req=>Array.from(req.body.payloads))).size,41);
+  s.peer.onicecandidate({candidate:{toJSON:()=>({candidate:'pending'})}});
+  const pending=r.flushTimer;s.room.hangup();assert.equal(s.timers.has(pending),false);
+  assert.equal(s.requests.filter(req=>req.url.endsWith('/candidates')).length,3);
+});
+
+test('signaling checks accelerate setup, never overlap, and back off after connection',async()=>{
+  let wait=false,finish;
+  const s=setup({request:async(url,method)=>{
+    if(url.endsWith('call-config'))return {iceServers:[],relayConfigured:true};
+    if(url==='/me/calls')return {id:'a'};
+    if(wait && method==='GET')return new Promise(resolve=>finish=resolve);
+    return {state:'ringing',signals:[]};
+  }});
+  await s.room.start('ada','Ada');await tick();const r=s.room.run;
+  assert.equal(s.delays.get(r.timer),500);
+  wait=true;const first=s.room.poll(r),second=s.room.poll(r);await second;
+  const count=s.requests.length;finish({state:'accepted',answer:'v=0\r\n',signals:[]});await first;
+  assert.equal(s.requests.length,count);assert.equal(s.delays.get(r.timer),250);
+  wait=false;s.peer.connectionState='connected';await s.room.poll(r);
+  assert.equal(s.delays.get(r.timer),5000);s.room.hangup();assert.equal(s.timers.has(r.timer),false);
+});
+
+test('signaling cursor advances only after applying remote candidates',async()=>{
+  const s=setup();await s.room.start('ada','Ada');await tick();const r=s.room.run;
+  s.setCall({signals:[{id:7,payload:'{"candidate":"first"}'}]});await s.room.poll(r);
+  assert.equal(r.afterSignalId,undefined);
+  s.setCall({state:'accepted',answer:'v=0\r\n'});await s.room.poll(r);await s.room.poll(r);
+  assert.equal(r.afterSignalId,7);assert.equal(s.peer.added.length,1);
+  assert.ok(s.requests.some(req=>req.url.endsWith('?afterSignalId=7')));s.room.hangup();
+});
+
+test('an invitation accepted in another tab during device setup cannot be ended by this tab',async()=>{
+  const s=setup({request:async(url,method,body)=>{
+    if(url.endsWith('call-config'))return {iceServers:[],relayConfigured:true};
+    if(body?.action==='accept')throw Object.assign(Error('Call already answered'),{status:409});
+    return {id:'a',state:'ringing',offer:'v=0\r\n',signals:[]};
+  }});
+  await s.room.accept('a','Ada');
+  assert.equal(s.room.busy,false);assert.ok(s.tracks.every(track=>track.stopped));
+  assert.equal(s.requests.some(req=>req.body?.action==='end'),false);
 });
 
 test('closing during camera permission stops a late stream', async () => {

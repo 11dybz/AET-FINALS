@@ -246,6 +246,45 @@ class ConnectionWorkflowTests {
             .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[1].call.state").value("ended"));
     }
 
+    @Test void candidateBatchesAreAuthorizedAtomicAndSupportIncrementalReads() throws Exception {
+        User a=user(true),b=user(true),other=user(true);connect(a,b);
+        String id=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        List<String> payloads=List.of("{\"candidate\":\"first\"}","{\"candidate\":\"second\"}");
+        String batch=json.writeValueAsString(Map.of("payloads",payloads));
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(other.cookie).contentType(MediaType.APPLICATION_JSON).content(batch))
+            .andExpect(status().isNotFound());
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON).content(batch))
+            .andExpect(status().isNoContent());
+        var response=mvc.perform(get("/api/me/calls/"+id).cookie(b.cookie)).andExpect(jsonPath("$.signals.length()").value(2)).andReturn();
+        long cursor=json.readTree(response.getResponse().getContentAsString()).get("signals").get(1).get("id").asLong();
+        mvc.perform(get("/api/me/calls/"+id+"?afterSignalId="+cursor).cookie(b.cookie)).andExpect(jsonPath("$.signals.length()").value(0));
+        mvc.perform(get("/api/me/calls/"+id).cookie(a.cookie)).andExpect(jsonPath("$.signals.length()").value(0));
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("payloads",List.of(payloads.get(0),"{}"))))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("payload",payloads.get(0))))).andExpect(status().isNoContent());
+        mvc.perform(get("/api/me/calls/"+id+"?afterSignalId="+cursor).cookie(b.cookie)).andExpect(jsonPath("$.signals.length()").value(1));
+        callAction(a,id,"end").andExpect(status().isOk());
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(b.cookie).contentType(MediaType.APPLICATION_JSON).content(batch))
+            .andExpect(status().isConflict());
+    }
+
+    @Test void batchLimitsCannotBypassThePerCallerCandidateQuota() throws Exception {
+        User a=user(true),b=user(true);connect(a,b);
+        String id=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        String payload="{\"candidate\":\"test\"}";
+        for (Map<String,Object> invalid : List.<Map<String,Object>>of(Map.of(),Map.of("payloads",List.of()),
+            Map.of("payloads",Collections.nCopies(21,payload)),Map.of("payload",payload,"payloads",List.of(payload))))
+            mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(invalid))).andExpect(status().isBadRequest());
+        String full=json.writeValueAsString(Map.of("payloads",Collections.nCopies(20,payload)));
+        for (int i=0;i<4;i++)mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON).content(full))
+            .andExpect(status().isNoContent());
+        mvc.perform(post("/api/me/calls/"+id+"/candidates").cookie(a.cookie).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("payloads",List.of(payload))))).andExpect(status().isTooManyRequests());
+        mvc.perform(get("/api/me/calls/"+id).cookie(b.cookie)).andExpect(jsonPath("$.signals.length()").value(80));
+    }
+
     private User user(boolean profile) throws Exception {
         String email=UUID.randomUUID()+"@example.com";
         Cookie cookie=mvc.perform(post("/api/auth/register").with(r -> {r.setRemoteAddr(email);return r;})

@@ -200,6 +200,7 @@ async function openChatThread(profileId) {
   await pollChatMessages(true);
   if (!chatOpen || generation !== chatGeneration) return;
   if (chatThreadReady) {
+    window.RizzumeExperience?.prepareCall?.();
     if (!compactChat()) composer.focus();
     try { await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`,'POST',undefined,{admin:false}); } catch (_) {}
     if (chatOpen && generation === chatGeneration) loadConversations();

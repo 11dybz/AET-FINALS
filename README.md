@@ -87,6 +87,8 @@ Run call and effect checks with `node --test FRONTEND/tests/calls.test.cjs FRONT
 
 ### Call alerts and chat history
 
+Call setup fetches the incoming offer alongside configuration, prepares ICE candidates during camera startup, and sends candidates in batches of up to 20. Opening a conversation or focusing a call button preloads configuration for 60 seconds without accessing the microphone or camera. Signaling checks run every 250 ms while joining, 500 ms while ringing, and 5 seconds once connected, with only new candidates returned. Incoming invitations are checked every second in visible account tabs (two seconds in background tabs, subject to browser throttling). Existing single-candidate clients remain supported. Restart the backend and refresh both participants' pages after pulling these changes.
+
 Incoming calls show an Answer/Voice/Decline card and play a repeating ringtone. If the browser blocks sound, choose **Enable ringing sound** on the card. The header bell's **Enable browser alerts** option also enables desktop call notifications. Keep the website open to receive incoming alerts; call checks continue in background tabs, subject to browser throttling. Ringing stops when the invitation ends, expires, is declined or answered, or you leave the workspace.
 
 Both participants see saved call events in their conversation: **Call ended** with the time since answering, **Missed call** for unanswered/expired invitations, and **Call declined**. These entries also appear in inbox previews. Repeated hangups produce one event. Server cleanup handles invitations after 90 seconds and disconnected calls even when both browsers close. This saves call history only; it does not capture audio or video.
