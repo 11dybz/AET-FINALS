@@ -17,4 +17,9 @@ public class Message {
     @Column(nullable = false, length = 1000) String body;
     @Column(nullable = false) Instant createdAt;
     Instant readAt;
+    Double locationLat;
+    Double locationLon;
+    @Column(length = 100) String locationName;
+    Instant locationExpiresAt;
+    Instant locationStoppedAt;
 }

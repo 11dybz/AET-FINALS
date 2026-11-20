@@ -1,0 +1,37 @@
+.rz-call-panel, .rz-call-panel * { box-sizing: border-box; }
+.rz-call-panel [hidden] { display: none !important; }
+.rz-call-panel .rz-local-video[data-filtered="true"] { transform: none; }
+.rz-call-filter-picker { margin-top: 18px; padding: 18px; background: #ffffff08; border: 1px solid #ffffff16; border-radius: 16px; }
+.rz-filter-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rz-filter-heading h3 { margin: 0; color: #fff; font-size: 15px; font-weight: 800; }
+.rz-filter-heading p { margin: 4px 0 0; color: #aeb6c5; font-size: 11px; line-height: 1.6; }
+.rz-filter-heading button { flex-shrink: 0; min-height: 36px; padding: 7px 12px; border: 1px solid #ffffff30; border-radius: 9px; background: #ffffff0a; color: #ffd4e0; font-size: 11px; font-weight: 700; }
+.rz-filter-categories { display: flex; gap: 6px; margin-top: 16px; padding: 4px; background: #0003; border-radius: 11px; }
+.rz-filter-categories button { flex: 1; min-height: 36px; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: #aeb6c5; font-size: 11px; font-weight: 700; }
+.rz-filter-categories button[aria-pressed="true"] { background: #ffffff15; color: #fff; }
+.rz-filter-group { margin-top: 18px; }
+.rz-snap-notice { color: #bbc5d5; font-size: 11px; line-height: 1.7; }
+.rz-snap-notice a { color: #ffe88b; text-decoration: underline; }
+#callSnapOptions { margin-top: 12px; grid-template-columns: repeat(auto-fill,minmax(85px,1fr)); }
+#callSnapOptions img { width: 50px; height: 50px; object-fit: cover; border-radius: 14px; }
+.rz-filter-categories button { min-width: 0; overflow-wrap: anywhere; }
+.rz-filter-group h4 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.rz-filter-options { display: grid; grid-template-columns: repeat(auto-fit,minmax(82px,1fr)); gap: 8px; }
+.rz-filter-options button { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; min-height: 85px; padding: 10px 5px; background: #ffffff06; border: 1px solid #ffffff12; border-radius: 12px; color: #e2e6ee; font-size: 10px; line-height: 1.4; font-weight: 600; }
+.rz-filter-options button:hover { background: #ffffff13; border-color: #ffffff40; }
+.rz-filter-options button[aria-pressed="true"] { background: #fe3c7220; border-color: #ff7199; box-shadow: inset 0 0 0 1px #ff7199; color: #fff; }
+.rz-filter-swatch { display: grid; place-items: center; width: 42px; height: 35px; background: linear-gradient(135deg,#554074,#a84e76); border-radius: 10px; color: #fff; font-size: 9px; font-weight: 900; letter-spacing: .02em; }
+.rz-filter-none { background: #34404e; }.rz-filter-glow { background: linear-gradient(135deg,#dca787,#e478a5); }.rz-filter-mono { background: linear-gradient(135deg,#d1d1d1,#454545); }.rz-filter-sepia { background: linear-gradient(135deg,#e6c67c,#805d39); }.rz-filter-cyber { background: linear-gradient(135deg,#c521d6,#215cf5); }
+.rz-filter-puppy { background: #9a643d; }.rz-filter-cat { background: #795a88; }.rz-filter-hearts { background: #dc396c; }.rz-filter-shades,.rz-filter-thug { background: #151719; border: 1px solid #ffffff25; }.rz-filter-crown { background: linear-gradient(135deg,#e7af30,#b37418); }.rz-filter-brain { background: #ce6e9d; }
+.rz-filter-fried { background: linear-gradient(135deg,#f7c728,#e44a24); }.rz-filter-wasted { background: #9e2f43; }.rz-filter-fine { background: linear-gradient(135deg,#f6b52b,#f35d37); }.rz-filter-news { background: linear-gradient(135deg,#d82c4b 50%,#31446e 50%); }
+.rz-filter-status { margin: 16px 0 0; min-height: 18px; font-size: 11px; line-height: 1.7; color: #c4cddd; }
+.rz-filter-retry { margin-top: 8px; padding: 8px 12px; min-height: 36px; border: 1px solid #ffffff30; border-radius: 9px; background: #ffffff0a; color: #ffd4e0; font-size: 11px; font-weight: 700; }
+.rz-call-controls { flex-wrap: wrap; }
+.rz-call-controls #callFilters[data-active="true"] { background: #fe3c7230; border-color: #ff7199; }
+.rz-call-panel:has(#callFilterPicker:not([hidden])) .rz-call-videos { width: 100%; height: min(38dvh,380px); min-height: 210px; aspect-ratio: auto; }
+@media(max-width:640px) {
+  .rz-call-filter-picker { padding: 14px; }
+  .rz-filter-heading { align-items: flex-start; }
+  .rz-filter-options { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .rz-call-panel:has(#callFilterPicker:not([hidden])) .rz-call-videos { height: min(28dvh,250px); min-height: 180px; aspect-ratio: auto; }
+}

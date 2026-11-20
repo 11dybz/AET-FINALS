@@ -134,8 +134,11 @@ async function refreshProfilesAndMatches() {
     swipeHistory = [];
   }
   if (!isGuestUser()) {
-    const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
-    matchedProfiles = Array.isArray(matches) ? matchableProfiles(matches) : [];
+    if (window.RizzumeConnections) await window.RizzumeConnections.refresh();
+    else {
+      const matches = await apiCall('/me/matches', 'GET', undefined, { admin: false });
+      matchedProfiles = Array.isArray(matches) ? matchableProfiles(matches) : [];
+    }
   } else {
     matchedProfiles = [];
   }
@@ -149,9 +152,6 @@ async function refreshProfilesAndMatches() {
 function updateDynamicCounts() {
   const matchBadge = document.getElementById('matchBadge');
   if (matchBadge) matchBadge.textContent = String(matchedProfiles.length);
-  ['teamCountHome', 'teamCountButton', 'teamCountFooter', 'directoryCount'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.textContent = String(PROFILES.length);
-  });
   document.querySelectorAll('[data-requires-backend]').forEach(button => {
     button.disabled = !backendAvailable;
     button.hidden = !window.RizzumeAccount?.user || !!window.RizzumeAccount.user.profileId;
@@ -179,7 +179,7 @@ function showBackendNotice(readOnly) {
   notice.textContent = readOnly ? 'Read-only fallback mode: backend unavailable.' : '';
 }
 
-// 4 SPECIFIED TEAM MEMBERS DATA MODEL
+// Seed portfolios used when the member service is unavailable.
 const FALLBACK_PROFILES = [
   {
     id: "chee-reynaldo",
@@ -462,6 +462,18 @@ function goToHome() {
 }
 
 // RENDER DIRECT DIRECTORY VIEW (BLURRED FOR GUESTS)
+function profileInitials(name) {
+  return String(name || 'Member').trim().split(/\s+/).filter(Boolean).slice(0, 2)
+    .map(part => Array.from(part)[0]).join('').toUpperCase() || 'M';
+}
+
+function setProfilePhoto(image, url) {
+  image.hidden = !url;
+  image.onerror = () => { image.hidden = true; };
+  if (url) image.src = url;
+  else image.removeAttribute('src');
+}
+
 function renderDirectory() {
   const grid = document.getElementById('directoryGrid');
   grid.innerHTML = '';
@@ -472,7 +484,7 @@ function renderDirectory() {
     card.innerHTML = `
       <div>
         <div class="flex items-center gap-3.5 mb-4">
-          <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 ${guest ? 'blur-[2px]' : ''}" />
+          <div class="member-avatar ${guest ? 'blur-[2px]' : ''}"><span aria-hidden="true">${escapeHtml(profileInitials(profile.name))}</span><img data-profile-photo alt="${escapeHtml(profile.name)}" hidden /></div>
           <div>
             <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${escapeHtml(profile.persona)}</span>
             <h3 class="font-black text-sm text-zinc-900 ${guest ? 'blur-[4px] select-none' : ''}">${escapeHtml(profile.name)}</h3>
@@ -490,6 +502,7 @@ function renderDirectory() {
         </button>
         ${canEditProfile(profile.id) ? `<button type="button" data-action="edit" class="w-full py-2.5 rounded-xl bg-pink-50 text-tinder-pink text-xs font-bold">Edit my profile</button><button type="button" data-action="delete" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">Delete</button>` : ''}
       </div>`;
+    setProfilePhoto(card.querySelector('[data-profile-photo]'), safeImageUrl(profile.images?.[0]?.url || profile.image));
     card.querySelector('[data-action="view"]').addEventListener('click', () => openProfileScreen(profile));
     if (canEditProfile(profile.id)) {
       card.querySelector('[data-action="edit"]').addEventListener('click', () => openProfileEditor(profile));
@@ -548,6 +561,7 @@ function playBeep(type) {
 // RENDER PROFILE STACK (CONTINUOUS LOOP + BLURRED TEASER FOR GUESTS)
 function renderDeck() {
   cardsState = matchableProfiles(cardsState);
+  if (window.RizzumeConnections) cardsState = cardsState.filter(p => window.RizzumeConnections.discoverable(p.id));
   const container = document.getElementById('cardsWrapper');
   const emptyDeck = document.getElementById('emptyDeck');
   container.innerHTML = '';
@@ -750,6 +764,7 @@ function triggerSwipeAction(direction) {
 
 async function finalizeSwipe(direction) {
   if (cardsState.length === 0 || isSwiping || matchRemovalPending) return;
+  if (!isGuestUser() && !backendAvailable) return showToast('Connect to Rizzume','Reconnect before sending a request.');
   if (isOwnProfile(cardsState[0].id)) { renderDeck(); return; }
   const card = activeCardElem || document.querySelector('#cardsWrapper .swipe-card:last-child');
   if (!card) return;
@@ -772,7 +787,11 @@ async function finalizeSwipe(direction) {
 
   if (backendAvailable) {
     try {
-      await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
+      if (action === 'pass') await apiCall(`/me/swipes/${encodeURIComponent(swipedProfile.id)}`, 'PUT', { action }, { admin: false });
+      else {
+        const result=await window.RizzumeConnections.send(swipedProfile,action === 'super_like');
+        if (!result) { isSwiping=false; hasSwipedOrMoved=false; renderDeck(); return; }
+      }
     } catch (error) {
       if (error.status === 404) {
         cardsState = cardsState.filter(profile => profile.id !== swipedProfile.id);
@@ -799,10 +818,7 @@ async function finalizeSwipe(direction) {
     playBeep('like');
     card.style.transform = 'translate3d(600px, 50px, 0px) rotate(25deg)';
     card.style.opacity = '0';
-    handleMatchSuccess(swipedProfile, false);
   } else if (direction === 'left') {
-    matchedProfiles = matchedProfiles.filter(profile => profile.id !== swipedProfile.id);
-    updateMatchesUI();
     playBeep('pass');
     card.style.transform = 'translate3d(-600px, 50px, 0px) rotate(-25deg)';
     card.style.opacity = '0';
@@ -811,7 +827,6 @@ async function finalizeSwipe(direction) {
     playBeep('super');
     card.style.transform = 'translate3d(0px, -700px, 0px) rotate(0deg)';
     card.style.opacity = '0';
-    handleMatchSuccess(swipedProfile, true);
   }
 
   setTimeout(() => {
@@ -827,22 +842,23 @@ async function rewindLastSwipe() {
   if (!swipeHistory.length) {
     return showToast('Nothing to Rewind', 'Swipe a card first to bring it back.');
   }
-  const last = swipeHistory.pop();
-  cardsState = [last.profile, ...cardsState.filter(p => p.id !== last.profile.id)];
+  const last = swipeHistory.at(-1);
   if (last.direction !== 'left') {
-    matchedProfiles = matchedProfiles.filter(p => p.id !== last.profile.id);
-    if (typeof syncRemovedMatch === 'function') syncRemovedMatch(last.profile.id);
-    updateMatchesUI();
-    if (backendAvailable) {
-      apiCall(`/me/swipes/${encodeURIComponent(last.profile.id)}`, 'PUT', { action: 'pass' }, { admin: false }).catch(() => {});
-    }
+    const state=window.RizzumeConnections?.state(last.profile.id);
+    if (state?.status !== 'pending' || state.direction !== 'outgoing')
+      return showToast('Request already changed','Review the latest status in Connections.');
+    try { await window.RizzumeConnections.action(last.profile.id,'cancel'); }
+    catch (error) { return showToast('Could not rewind',error.message); }
   }
+  swipeHistory.pop();
+  cardsState = [last.profile, ...cardsState.filter(p => p.id !== last.profile.id)];
   renderDeck();
   showToast('Rewound!', `${last.profile.name} is back on top.`);
 }
 
 function handleMatchSuccess(profile, isSuper) {
   if (isOwnProfile(profile.id)) return;
+  if (window.RizzumeConnections?.state(profile.id)?.status !== 'accepted') return;
   currentlyViewingProfile = profile;
   const existing = matchedProfiles.find(item => item.id === profile.id);
   if (!existing) matchedProfiles.push({ ...profile, isSuper });
@@ -858,14 +874,12 @@ function handleMatchSuccess(profile, isSuper) {
   const avatar = document.getElementById('matchModalAvatar');
 
   avatar.src = safeImageUrl(profile.image);
-  subtitle.innerHTML = isSuper 
-    ? `🔥 <strong>SUPER LIKE!</strong> Priority match unlocked with <strong>${escapeHtml(profile.name)}</strong>!`
-    : `You and <strong>${escapeHtml(profile.name)}</strong> matched! Review projects or connect directly.`;
+  subtitle.innerHTML = `You and <strong>${escapeHtml(profile.name)}</strong> are now connected. Say hello and build something together.`;
 
   modal.classList.remove('opacity-0', 'pointer-events-none');
   box.classList.remove('scale-90');
   box.classList.add('scale-100');
-  showToast(isSuper ? '★ SUPER LIKED!' : '♥ MATCHED!', 'Added to matches list.');
+  showToast('Connection accepted', 'You can now message and call each other.');
 }
 
 function closeMatchModal() {
@@ -894,13 +908,13 @@ async function messageCurrentProfile() {
   const profile = currentlyViewingProfile;
   if (isOwnProfile(profile.id)) return showToast('Your profile', 'You cannot match or message yourself.');
   if (!backendAvailable) {
-    return copyCurrentProfileEmail();
+    return showToast('Connect to Rizzume','Reconnect before sending a request.');
   }
   if (!matchedProfiles.some(p => p.id === profile.id)) {
     try {
-      await apiCall(`/me/swipes/${encodeURIComponent(profile.id)}`, 'PUT', { action: 'like' }, { admin: false });
-      matchedProfiles.push({ ...profile, isSuper: false });
-      updateMatchesUI();
+      const result=await window.RizzumeConnections.send(profile);
+      if (result?.status === 'pending') window.RizzumeConnections.open(result.direction);
+      return;
     } catch (error) {
       return showToast('Could not connect', error.message);
     }
@@ -958,13 +972,20 @@ function openProfileScreen(profile) {
   }
 
   const hero = document.getElementById('detailHeroImage');
-  hero.src = safeImageUrl(profile.images?.[0]?.url || profile.image);
+  setProfilePhoto(hero, safeImageUrl(profile.images?.[0]?.url || profile.image));
   hero.alt = profile.name || 'Profile';
-  hero.classList.toggle('hidden', !hero.src);
+  document.getElementById('detailHeroInitials').textContent = profileInitials(profile.name);
   document.getElementById('detailHeroName').textContent = profile.name || '';
-  document.getElementById('detailHeroRole').textContent = profile.role || '';
-  document.getElementById('detailPersonaBadge').textContent = profile.persona || '';
-  document.getElementById('detailFullBio').textContent = profile.details?.fullBio || profile.bio || '';
+  document.getElementById('detailHeroRole').textContent = profile.role || 'Portfolio member';
+  const persona = document.getElementById('detailPersonaBadge');
+  persona.textContent = profile.persona || '';
+  persona.hidden = !profile.persona;
+  const location = document.getElementById('detailHeroLocation');
+  location.textContent = profile.location || '';
+  location.hidden = !profile.location;
+  const bio = document.getElementById('detailFullBio');
+  bio.textContent = profile.details?.fullBio || profile.bio || "This member hasn't added an introduction yet.";
+  bio.classList.toggle('detail-empty', !profile.details?.fullBio && !profile.bio);
 
   const ghLink = document.getElementById('detailGithubLink');
   const liLink = document.getElementById('detailLinkedinLink');
@@ -988,6 +1009,12 @@ function openProfileScreen(profile) {
     `;
     projectContainer.appendChild(item);
   });
+  if (!projectContainer.children.length) {
+    const empty = document.createElement('p');
+    empty.className = 'detail-empty-panel';
+    empty.textContent = 'No projects shared yet.';
+    projectContainer.appendChild(empty);
+  }
   const skills = document.getElementById('detailSkillsContainer');
   skills.replaceChildren();
   (profile.tags || []).forEach(tag => {
@@ -996,10 +1023,20 @@ function openProfileScreen(profile) {
     pill.textContent = tag;
     skills.appendChild(pill);
   });
+  if (!skills.children.length) {
+    const empty = document.createElement('p');
+    empty.className = 'detail-empty';
+    empty.textContent = 'Skills will appear here when added.';
+    skills.appendChild(empty);
+  }
 
   renderProfileGallery(profile);
   const contactButton = document.getElementById('detailGetInTouchBtn');
   if (contactButton) contactButton.hidden = isOwnProfile(profile.id);
+  if (contactButton && !isOwnProfile(profile.id)) {
+    const state=window.RizzumeConnections?.state(profile.id);
+    contactButton.textContent=state?.status === 'accepted' ? 'Message' : state?.status === 'pending' ? 'View request' : 'Send connection request';
+  }
   const actions = ensureProfileActions();
   actions.replaceChildren();
   if (canEditProfile(profile.id)) {
@@ -1044,20 +1081,20 @@ function renderProfileGallery(profile) {
     content.insertBefore(gallery, content.children[1]);
   }
   const images = (profile.images || []).map(image => safeImageUrl(image.url)).filter(Boolean);
-  if (!images.length && profile.image) images.push(safeImageUrl(profile.image));
+  const mainPhoto = safeImageUrl(profile.image);
+  if (!images.length && mainPhoto) images.push(mainPhoto);
   currentGalleryIndex = 0;
   gallery.replaceChildren();
+  gallery.dataset.images = JSON.stringify(images);
+  gallery.hidden = !images.length;
+  document.getElementById('detailCover').hidden = !!images.length;
+  if (!images.length) return;
   const frame = document.createElement('div');
   frame.className = 'relative';
   const track = document.createElement('div');
   track.id = 'profileGalleryTrack';
   track.className = 'gallery-track';
-  if (!images.length) {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'h-52 rounded-2xl bg-gradient-to-br from-tinder-pink to-violet-700 flex items-center justify-center text-white text-5xl font-black';
-    placeholder.textContent = (profile.name || '?').slice(0, 1).toUpperCase();
-    track.appendChild(placeholder);
-  } else {
+  {
     images.forEach((url, index) => {
       const slide = document.createElement('div');
       slide.className = 'gallery-slide';
@@ -1077,7 +1114,13 @@ function renderProfileGallery(profile) {
         if (index === currentGalleryIndex) fitGalleryHeight(index);
       };
       image.addEventListener('load', imageSettled, { once: true });
-      image.addEventListener('error', imageSettled, { once: true });
+      image.addEventListener('error', () => {
+        const fallback = document.createElement('div');
+        fallback.className = 'gallery-photo-fallback';
+        fallback.textContent = 'Photo unavailable';
+        slide.replaceChildren(fallback);
+        imageSettled();
+      }, { once: true });
       image.addEventListener('click', () => openLightbox(images, index));
       slide.append(backdrop, image);
       track.appendChild(slide);
@@ -1118,8 +1161,9 @@ function renderProfileGallery(profile) {
   const counter = document.createElement('span');
   counter.id = 'profileGalleryCounter';
   counter.className = 'text-[10px] font-bold text-zinc-400';
-  counter.textContent = images.length ? `1/${images.length}` : '0/0';
+  counter.textContent = `1/${images.length}`;
   footer.append(dots, counter);
+  footer.hidden = images.length < 2;
   gallery.appendChild(footer);
   track.addEventListener('scroll', () => {
     if (!images.length) return;
@@ -1142,7 +1186,7 @@ function moveGallery(direction) { setGalleryIndex(currentGalleryIndex + directio
 function updateGalleryIndicators(index, count) {
   currentGalleryIndex = index;
   const counter = document.getElementById('profileGalleryCounter');
-  if (counter) counter.textContent = count ? `${index + 1}/${count}` : '0/0';
+  if (counter) counter.textContent = count ? `${index + 1}/${count}` : '';
   document.querySelectorAll('#profileGalleryDots .gallery-dot').forEach((dot, dotIndex) => {
     dot.classList.toggle('active', dotIndex === index);
   });
@@ -1237,6 +1281,7 @@ function toggleMatchesDrawer(show) {
     backdrop.classList.add('opacity-0', 'pointer-events-none');
     drawer.classList.add('translate-x-full');
   }
+  window.RizzumeConnections?.drawerState(show);
 }
 
 async function removeSavedMatch(profileId) {
@@ -1246,7 +1291,7 @@ async function removeSavedMatch(profileId) {
   if (!matchedProfiles.some(profile => profile.id === profileId)) return false;
   matchRemovalPending = true;
   try {
-    await apiCall(`/me/swipes/${encodeURIComponent(profileId)}`, 'PUT', {action:'pass'}, {admin:false});
+    await window.RizzumeConnections.action(profileId,'remove');
     matchedProfiles = matchedProfiles.filter(profile => profile.id !== profileId);
     if (typeof syncRemovedMatch === 'function') syncRemovedMatch(profileId);
     updateMatchesUI();
@@ -1261,11 +1306,11 @@ function askToRemoveMatch(profileId) {
   if (!matchRemovalDialog) {
     const {dialog, icon} = window.RizzumeUI;
     matchRemovalDialog = dialog('removeMatchConfirmation', `<section class="rz-dialog-panel rz-remove-match-panel" aria-describedby="removeMatchDescription">
-      <div class="rz-dialog-header"><h2>Remove this match?</h2><button type="button" data-close class="rz-icon-button" aria-label="Close remove match confirmation">${icon('close')}</button></div>
-      <p id="removeMatchDescription" class="rz-remove-match-description">Remove <strong id="removeMatchName"></strong> from your matches?</p>
-      <p class="rz-help">This connection will leave your matches and inbox. Your existing messages will stay saved. You can like their profile again to reconnect.</p>
+      <div class="rz-dialog-header"><h2>Remove this connection?</h2><button type="button" data-close class="rz-icon-button" aria-label="Close remove match confirmation">${icon('close')}</button></div>
+      <p id="removeMatchDescription" class="rz-remove-match-description">Remove <strong id="removeMatchName"></strong> from your connections?</p>
+      <p class="rz-help">Messaging and calls will close for both people. Existing messages stay saved. Reconnecting requires a new request and acceptance.</p>
       <p id="removeMatchError" class="rz-remove-match-error" role="alert" tabindex="-1" hidden></p>
-      <div class="rz-dialog-actions"><button id="cancelRemoveMatch" type="button" data-close class="rz-outline-button">Cancel</button><button id="confirmRemoveMatch" type="button" class="rz-primary">Remove match</button></div>
+      <div class="rz-dialog-actions"><button id="cancelRemoveMatch" type="button" data-close class="rz-outline-button">Cancel</button><button id="confirmRemoveMatch" type="button" class="rz-primary">Remove connection</button></div>
     </section>`, () => { matchRemovalTarget = null; },
       {initialFocus:'#cancelRemoveMatch', canClose:() => !matchRemovalPending});
     document.getElementById('confirmRemoveMatch').onclick = async () => {
@@ -1278,14 +1323,14 @@ function askToRemoveMatch(profileId) {
       try {
         const removed = await removeSavedMatch(target.id);
         matchRemovalDialog.close();
-        if (removed) showToast('Match removed', 'You can like this profile again to reconnect.');
+        if (removed) showToast('Connection removed', 'Send a new request to reconnect after one minute.');
         (document.querySelector('#matchesList [data-view]') || document.querySelector('#matchesDrawer button'))?.focus();
       } catch (failure) {
         error.textContent = failure.message || 'Could not remove this match. Please try again.';
         error.hidden = false; error.focus();
       } finally {
         buttons.forEach(button => { button.disabled = false; });
-        matchRemovalDialog.el.removeAttribute('aria-busy'); confirm.textContent = 'Remove match';
+        matchRemovalDialog.el.removeAttribute('aria-busy'); confirm.textContent = 'Remove connection';
       }
     };
   }
@@ -1301,6 +1346,7 @@ function updateMatchesUI() {
   const count = matchedProfiles.length;
   document.getElementById('matchBadge').textContent = count;
   const list = document.getElementById('matchesList');
+  if (window.RizzumeConnections) { window.RizzumeConnections.render(); return; }
   list.innerHTML = '';
   if (count === 0) {
     list.innerHTML = `<div class="py-16 text-center text-zinc-400"><i data-lucide="heart-crack" class="w-10 h-10 mx-auto mb-2 opacity-50"></i><p class="text-xs font-bold text-zinc-600">No matches yet</p><p class="text-[11px] text-zinc-400 mt-0.5">Swipe right on a developer to match!</p></div>`;
@@ -1419,6 +1465,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (loggedIn) {
     window.RizzumeExperience?.ready();
     const urlParams = new URLSearchParams(window.location.search || '');
+    const connectionsTab=urlParams.get('connections');
+    if (['incoming','outgoing','accepted'].includes(connectionsTab)) window.RizzumeConnections?.open(connectionsTab);
     const qrProfileId = urlParams.get('profile');
     if (qrProfileId && PROFILES.some(p => p.id === qrProfileId)) {
       openProfileScreenById(qrProfileId);

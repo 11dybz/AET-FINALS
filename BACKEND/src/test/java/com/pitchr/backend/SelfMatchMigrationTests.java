@@ -20,7 +20,7 @@ class SelfMatchMigrationTests {
             jdbc.update("insert into notifications(session_id,profile_id,kind,body,created_at) values ('self-workspace',?,'match','Saved match',CURRENT_TIMESTAMP)",id);
         }
         jdbc.update("insert into messages(session_id,profile_id,sender,body,created_at) values ('self-workspace','chee-reynaldo','visitor','Existing history',CURRENT_TIMESTAMP)");
-        Flyway.configure().dataSource(ds).load().migrate();
+        Flyway.configure().dataSource(ds).target("8").load().migrate();
         assertThat(jdbc.queryForObject("select action from swipes where profile_id='chee-reynaldo'",String.class)).isEqualTo("pass");
         assertThat(jdbc.queryForObject("select action from swipes where profile_id='dapog-john-greg'",String.class)).isEqualTo("like");
         assertThat(jdbc.queryForObject("select state from video_calls where id='chee-reynaldo'",String.class)).isEqualTo("ended");

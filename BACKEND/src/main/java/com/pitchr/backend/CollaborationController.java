@@ -42,13 +42,12 @@ public class CollaborationController {
         List<Map<String, Object>> servers = new ArrayList<>();
         servers.add(Map.of("urls", "stun:stun.l.google.com:19302"));
         if (!turnUrl.isBlank()) servers.add(Map.of("urls", turnUrl, "username", turnUser, "credential", turnPassword));
-        return Map.of("iceServers", servers, "relayConfigured", !turnUrl.isBlank(), "callingEnabled", callingEnabled);
+        return Map.of("iceServers", servers, "relayConfigured", !turnUrl.isBlank(), "callingEnabled",
+            request.getRequestURI().contains("/team/") ? callingEnabled : true);
     }
     @PostMapping("/me/calls")
     public CollaborationService.CallView start(@CookieValue(name = PortfolioController.COOKIE, required = false) String token,
         @Valid @RequestBody StartRequest request) {
-        if (!callingEnabled) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-            "Video calls are not configured yet. The team can enable its workspace to receive calls.");
         return service.start(token, request.profileId(), request.offer());
     }
 

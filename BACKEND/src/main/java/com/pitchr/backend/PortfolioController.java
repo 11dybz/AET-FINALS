@@ -46,6 +46,8 @@ public class PortfolioController {
             "profile", "GET /api/profiles/{id}",
             "session", "POST /api/session",
             "matches", "GET /api/me/matches",
+            "connections", "GET /api/me/connections",
+            "requests", "POST /api/me/connection-requests/{profileId}",
             "swipe", "PUT /api/me/swipes/{profileId}",
             "team", "GET /api/team"));
     }

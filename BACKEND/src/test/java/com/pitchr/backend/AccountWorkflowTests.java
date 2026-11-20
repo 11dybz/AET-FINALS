@@ -83,9 +83,12 @@ class AccountWorkflowTests {
             .andExpect(status().isForbidden());
         mvc.perform(put("/api/me/swipes/"+id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
             .content("{\"action\":\"pass\"}")).andExpect(status().isOk());
-        Cookie other=register(email());
+        Cookie other=register(email()); createProfile(other);
         mvc.perform(put("/api/me/swipes/"+id).cookie(other).contentType(MediaType.APPLICATION_JSON)
             .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        mvc.perform(get("/api/me/matches").cookie(other)).andExpect(content().json("[]"));
+        mvc.perform(post("/api/me/connections/"+createProfileId(other)+"/action").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"accept\"}")).andExpect(status().isOk());
         mvc.perform(get("/api/me/matches").cookie(other)).andExpect(jsonPath("$[0].id").value(id));
     }
 
@@ -106,9 +109,12 @@ class AccountWorkflowTests {
 
     @Test void loginAndLogoutPreserveMatchesButRevokeOldCredentials() throws Exception {
         String email = email(); Cookie first = register(email);
-        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(first).contentType(MediaType.APPLICATION_JSON)
+        String sender=createProfile(first); Cookie recipient=register(email()); String target=createProfile(recipient);
+        mvc.perform(put("/api/me/swipes/"+target+"").cookie(first).contentType(MediaType.APPLICATION_JSON)
             .content("{\"action\":\"like\"}")).andExpect(status().isOk());
-        mvc.perform(post("/api/me/conversations/chee-reynaldo/messages").cookie(first).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/me/connections/"+sender+"/action").cookie(recipient).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"accept\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/me/conversations/"+target+"/messages").cookie(first).contentType(MediaType.APPLICATION_JSON)
             .content("{\"body\":\"Saved account conversation\"}")).andExpect(status().isOk());
         mvc.perform(post("/api/auth/logout").cookie(first)).andExpect(status().isNoContent())
             .andExpect(cookie().maxAge(PortfolioController.COOKIE,0));
@@ -116,8 +122,8 @@ class AccountWorkflowTests {
         mvc.perform(get("/api/me/matches").cookie(first)).andExpect(status().isUnauthorized());
         Cookie second = login(email.toUpperCase(), PASSWORD, null);
         assertThat(second.getValue()).isNotEqualTo(first.getValue());
-        mvc.perform(get("/api/me/matches").cookie(second)).andExpect(jsonPath("$[0].id").value("chee-reynaldo"));
-        mvc.perform(get("/api/me/conversations/chee-reynaldo/messages").cookie(second))
+        mvc.perform(get("/api/me/matches").cookie(second)).andExpect(jsonPath("$[0].id").value(target));
+        mvc.perform(get("/api/me/conversations/"+target+"/messages").cookie(second))
             .andExpect(jsonPath("$[0].body").value("Saved account conversation"));
         Cookie rotated = login(email, PASSWORD, second);
         mvc.perform(get("/api/auth/me").cookie(second)).andExpect(jsonPath("$.authenticated").value(false));
@@ -125,13 +131,13 @@ class AccountWorkflowTests {
     }
 
     @Test void accountDataAndNotificationsAreIsolated() throws Exception {
-        Cookie a = register(email()), b = register(email());
-        mvc.perform(put("/api/me/swipes/dapog-john-greg").cookie(a).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
-        mvc.perform(get("/api/me/matches").cookie(b)).andExpect(content().json("[]"));
-        mvc.perform(get("/api/me/notifications").cookie(a)).andExpect(jsonPath("$.unreadCount").value(1));
-        mvc.perform(get("/api/me/notifications").cookie(b)).andExpect(jsonPath("$.unreadCount").value(0));
-        mvc.perform(get("/api/me/conversations/dapog-john-greg/messages").cookie(b)).andExpect(status().isForbidden());
+        Cookie a=register(email()),b=register(email()),other=register(email());
+        createProfile(a);String target=createProfile(b);createProfile(other);
+        mvc.perform(post("/api/me/connection-requests/"+target).cookie(a)).andExpect(status().isOk());
+        mvc.perform(get("/api/me/matches").cookie(other)).andExpect(content().json("[]"));
+        mvc.perform(get("/api/me/notifications").cookie(b)).andExpect(jsonPath("$.unreadCount").value(1));
+        mvc.perform(get("/api/me/notifications").cookie(other)).andExpect(jsonPath("$.unreadCount").value(0));
+        mvc.perform(get("/api/me/conversations/"+target+"/messages").cookie(other)).andExpect(status().isForbidden());
     }
 
     @Test void validationRejectsWeakMismatchedOrDuplicateCredentials() throws Exception {
@@ -165,8 +171,12 @@ class AccountWorkflowTests {
     @Test void accountCallsAndTeamRepliesShareThePersistentWorkspace() throws Exception {
         String email=email(); Cookie cookie=register(email);
         String workspace=accounts.findByEmail(email).orElseThrow().workspaceId;
+        String sender=createProfile(cookie); String receiverEmail=email(); Cookie receiver=register(receiverEmail);
+        Account recipient=accounts.findByEmail(receiverEmail).orElseThrow();recipient.profileId="fontelar-dave";accounts.saveAndFlush(recipient);
         mvc.perform(put("/api/me/swipes/fontelar-dave").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
             .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/me/connections/"+sender+"/action").cookie(receiver).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"accept\"}")).andExpect(status().isOk());
         mvc.perform(post("/api/team/conversations/" + workspace + "/fontelar-dave/messages").header("X-Team-Key","account-team")
             .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Reply for account\"}")).andExpect(status().isOk());
         var result=mvc.perform(post("/api/me/calls").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
@@ -180,6 +190,7 @@ class AccountWorkflowTests {
         mvc.perform(post("/api/auth/logout").cookie(cookie)).andExpect(status().isNoContent());
         mvc.perform(get("/api/team/calls/"+call).header("X-Team-Key","account-team"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.state").value("ended"));
+        recipient.profileId=null;accounts.saveAndFlush(recipient);
     }
 
     @Test void hostileOriginsAreRejectedAndRepeatedLoginsAreLimited() throws Exception {
@@ -257,6 +268,15 @@ class AccountWorkflowTests {
             .andExpect(status().isForbidden());
     }
 
+    private String createProfile(Cookie user) throws Exception {
+        return json.readTree(mvc.perform(post("/api/profiles").cookie(user).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(java.util.Map.of("name","Account Test "+UUID.randomUUID(),"age",24))))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asString();
+    }
+    private String createProfileId(Cookie user) throws Exception {
+        return json.readTree(mvc.perform(get("/api/auth/me").cookie(user)).andReturn().getResponse().getContentAsString())
+            .get("user").get("profileId").asString();
+    }
     private String email(){return "test-"+UUID.randomUUID()+"@example.com";}
     private String credentials(String email,String password){return json.writeValueAsString(java.util.Map.of("email",email,"password",password));}
     private String registration(String email,String password,String confirm){return json.writeValueAsString(java.util.Map.of("name","Test User","email",email,"password",password,"confirmPassword",confirm));}

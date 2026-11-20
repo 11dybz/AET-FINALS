@@ -22,16 +22,23 @@
       if (run !== version) return;
       $('incomingCalls').replaceChildren();
       const incoming = calls.filter(c => c.state === 'ringing');
-      $('teamCallStatus').textContent = incoming.length ? `${incoming.length} incoming video call${incoming.length === 1 ? '' : 's'}.` : 'Listening for video calls while this workspace is open.';
+      $('teamCallStatus').textContent = incoming.length ? `${incoming.length} incoming call${incoming.length === 1 ? '' : 's'}.` : 'Listening for calls while this workspace is open.';
       for (const c of incoming) {
         const row = document.createElement('div'); row.className = 'rz-team-incoming';
-        row.innerHTML = `<div><strong>Someone wants to connect.</strong><p>Incoming video call · ${new Date(c.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p></div><button class="rz-primary" type="button" data-accept>${icon('video')}Answer</button><button class="rz-outline-button" type="button" data-decline>Decline</button>`;
+        row.innerHTML = `<div><strong>Someone wants to connect.</strong><p>Incoming call · ${new Date(c.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p></div><button class="rz-primary" type="button" data-accept>${icon('video')}Answer</button><button class="rz-outline-button" type="button" data-accept-audio>${icon('mic')}Voice</button><button class="rz-outline-button" type="button" data-decline>Decline</button>`;
         row.querySelector('[data-accept]').onclick = async () => {
           if (run !== version) return;
           if (room?.busy) return toast('Finish your current call before answering another.');
           const button = row.querySelector('[data-accept]'); button.disabled = true;
           room ||= new RizzumeVideoRoom({team:true, request:(path, method, body, options) => request(path, method, body, options, snapshot.key)});
           await room.accept(c.id, 'your visitor');
+          if (run === version) { clearTimeout(timer); poll(snapshot, run); }
+        };
+        row.querySelector('[data-accept-audio]').onclick = async () => {
+          if (run !== version || room?.busy) return;
+          row.querySelector('[data-accept-audio]').disabled = true;
+          room ||= new RizzumeVideoRoom({team:true, request:(path, method, body, options) => request(path, method, body, options, snapshot.key)});
+          await room.accept(c.id, 'your visitor', {video:false});
           if (run === version) { clearTimeout(timer); poll(snapshot, run); }
         };
         row.querySelector('[data-decline]').onclick = async () => {

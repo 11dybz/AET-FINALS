@@ -1,15 +1,24 @@
 (() => {
   const API = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
   const id = document.body.dataset.profileId;
-  let available = false, saving = false;
+  let available = false, saving = false, relationship = null;
   const accountReady = window.RizzumeAccount?.checkOptional ? window.RizzumeAccount.checkOptional().catch(() => false) : Promise.resolve(false);
   const isOwnProfile = () => !!id && window.RizzumeAccount?.user?.profileId === id;
   function syncOwnProfileActions() {
     document.querySelectorAll('[onclick="likeProfile()"], [data-profile-connect]').forEach(control => {
       control.hidden = isOwnProfile();
+      if (!isOwnProfile()) control.textContent=relationship?.status === 'accepted' ? 'Message connection'
+        : relationship?.status === 'pending' ? (relationship.direction === 'incoming' ? 'Review connection request' : 'View sent request') : 'Send connection request';
     });
   }
-  accountReady.then(syncOwnProfileActions);
+  async function refreshRelationship() {
+    if (window.RizzumeAccount?.user && !isOwnProfile()) {
+      try { relationship=(await call('/me/connections')).find(item => item.profile.id === id) || null; } catch (_) {}
+    }
+    syncOwnProfileActions();
+  }
+  accountReady.then(refreshRelationship);
+  document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshRelationship(); });
   const sections = document.querySelectorAll('main > section');
 
   function imageUrl(value) {
@@ -62,18 +71,7 @@
     event.preventDefault();
     await accountReady;
     if (isOwnProfile()) return notify('You cannot message your own profile.');
-    if (saving) return;
-    saving = true;
-    try {
-      await call('/me/swipes/' + encodeURIComponent(id), 'PUT', { action: 'like' });
-      window.location.href = 'index.html?chat=' + encodeURIComponent(id);
-    } catch (error) {
-      if (error.status === 401) {
-        window.location.href = 'login.html?next=' + encodeURIComponent('index.html?chat=' + id);
-        return;
-      }
-      notify(error.message);
-    } finally { saving = false; }
+    return window.likeProfile();
   }
 
   function render(profile) {
@@ -198,24 +196,34 @@
     await accountReady;
     if (isOwnProfile()) return notify('You cannot match with your own profile.');
     if (saving) return;
-    if (!available) return notify('Backend unavailable. Reload before saving a match.');
-    saving = true;
+    if (!window.RizzumeAccount?.user) {
+      window.location.href='login.html?next='+encodeURIComponent(window.location.pathname); return;
+    }
+    if (!available) return notify('Reconnect to Rizzume before sending a request.');
+    saving=true;
     try {
-      await call('/me/swipes/' + encodeURIComponent(id), 'PUT', { action: 'like' });
-      window.confetti?.({ particleCount: 90, spread: 80, origin: { y: 0.8 }, colors: ['#FE3C72', '#00D2FF', '#9B51E0', '#FFD700', '#FFFFFF'] });
-      notify('♥ Match saved! Open the team page to view your matches.');
-    } catch (error) {
-      if (error.status === 401) {
-        window.location.href = 'login.html?next=' + encodeURIComponent(window.location.pathname);
-        return;
+      await refreshRelationship();
+      if (relationship?.status === 'accepted') {
+        window.location.href='index.html?chat='+encodeURIComponent(id); return;
       }
-      notify(error.message);
-    } finally { saving = false; }
+      if (relationship?.status === 'pending') {
+        window.location.href='index.html?connections='+relationship.direction; return;
+      }
+      relationship=await call('/me/connection-requests/'+encodeURIComponent(id),'POST',{priority:false});
+      syncOwnProfileActions();
+      notify(relationship.ownerAvailable === false ? 'Request saved. This profile’s owner needs to activate their account before replying.'
+        : relationship.status === 'accepted' ? 'You are already connected. Open Messages to say hello.'
+        : relationship.direction === 'incoming' ? 'This person sent you a request. Review it in Connections.'
+        : 'Connection request sent. Messaging opens when they accept.');
+    } catch (error) {
+      if (error.status === 401) window.location.href='login.html?next='+encodeURIComponent(window.location.pathname);
+      else notify(error.message);
+    } finally { saving=false; }
   };
 
   if (id) {
     call('/profiles/' + encodeURIComponent(id))
-      .then(profile => { render(profile); available = true; })
+      .then(profile => { render(profile); available = true; syncOwnProfileActions(); })
       .catch(() => { available = false; });
   }
 })();

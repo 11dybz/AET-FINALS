@@ -47,13 +47,15 @@ test('public profile actions wait for account identity and reject both self-matc
   const publicSource=fs.readFileSync(path.join(__dirname,'../profile.js'),'utf8');
   let ready;const user={id:'account',profileId:own.id},requests=[],controls=[{}];
   const window={location:{},RizzumeAccount:{user:null,checkOptional:()=>new Promise(resolve=>{ready=()=>{window.RizzumeAccount.user=user;resolve(true);};})}};
-  const context=vm.createContext({window,document:{querySelectorAll:()=>controls},id:own.id,available:true,saving:false,
-    notify(){},async call(...args){requests.push(args);}});
+  const context=vm.createContext({window,document:{querySelectorAll:()=>controls,addEventListener(){}},id:own.id,available:true,saving:false,relationship:null,
+    notify(){},async call(...args){requests.push(args);return args[0] === '/me/connections' ? [] : {status:'pending',direction:'outgoing'};}});
   vm.runInContext(publicSource.slice(publicSource.indexOf('  const accountReady ='),publicSource.indexOf('  const sections =')),context);
   vm.runInContext(publicSource.slice(publicSource.indexOf('  window.likeProfile ='),publicSource.lastIndexOf('  if (id) {')),context);
   vm.runInContext(publicSource.slice(publicSource.indexOf('  async function openDirectMessage('),publicSource.indexOf('  function render(')),context);
   const pending=context.window.likeProfile();assert.equal(requests.length,0);ready();await pending;
   await context.openDirectMessage({preventDefault(){}});
   assert.equal(requests.length,0);assert.equal(controls[0].hidden,true);
-  user.profileId=other.id;await context.window.likeProfile();assert.equal(requests.length,1);
+  user.profileId=other.id;await context.window.likeProfile();
+  assert.equal(requests.filter(args => args[1] === 'POST').length,1);
+  assert.equal(requests.at(-1)[0],'/me/connection-requests/'+own.id);
 });

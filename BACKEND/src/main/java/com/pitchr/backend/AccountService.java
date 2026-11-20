@@ -66,7 +66,10 @@ public class AccountService {
         if (token == null || token.length() > 128) return;
         authSessions.findById(digest(token)).ifPresent(session -> {
             if (session.expiresAt.isAfter(Instant.now())) accounts.findById(session.accountId)
-                .ifPresent(account -> calls.endWorkspaceCalls(account.workspaceId));
+                .ifPresent(account -> {
+                    calls.endWorkspaceCalls(account.workspaceId);
+                    if (account.profileId != null) calls.endProfileCalls(account.profileId);
+                });
             authSessions.delete(session);
         });
     }

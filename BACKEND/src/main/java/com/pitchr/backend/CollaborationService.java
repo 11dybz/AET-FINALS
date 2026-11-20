@@ -19,13 +19,16 @@ public class CollaborationService {
     private final CallSignalRepository signals;
     private final NotificationRepository notifications;
     private final AccountService accounts;
+    private final ConnectionService connections;
     private final JsonMapper json = new JsonMapper();
 
     CollaborationService(SessionRepository sessions, SwipeRepository swipes, ProfileRepository profiles,
-                         VideoCallRepository calls, CallSignalRepository signals, NotificationRepository notifications, AccountService accounts) {
+                         VideoCallRepository calls, CallSignalRepository signals, NotificationRepository notifications, AccountService accounts,
+                         ConnectionService connections) {
         this.sessions = sessions; this.swipes = swipes; this.profiles = profiles;
         this.calls = calls; this.signals = signals; this.notifications = notifications;
         this.accounts = accounts;
+        this.connections = connections;
     }
 
     void notify(String session, String profile, String kind, String body) {
@@ -46,31 +49,47 @@ public class CollaborationService {
     }
 
     public CallView start(String token, String profileId, String offer) {
-        var visitor = session(token, true); matched(visitor.id, profileId);
+        connections.threadForWrite(token,profileId);
+        var visitor = session(token, false); matched(visitor.id, profileId);
         validateSdp(offer);
         for (VideoCall existing : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(visitor.id, ACTIVE)) {
             expire(existing);
             if (ACTIVE.contains(existing.state)) throw failure(HttpStatus.CONFLICT, "You already have an active call");
+        }
+        for (String participant : List.of(accounts.profileIdForWorkspace(visitor.id),profileId)) {
+            List<VideoCall> busy=new ArrayList<>(calls.findByProfileIdAndStateInOrderByCreatedAtDesc(participant,ACTIVE));
+            String workspace=connections.workspaceForProfile(participant);
+            if (workspace != null) busy.addAll(calls.findBySessionIdAndStateInOrderByCreatedAtDesc(workspace,ACTIVE));
+            for (VideoCall existing : busy) {
+                expire(existing);
+                if (ACTIVE.contains(existing.state)) throw failure(HttpStatus.CONFLICT,"One of you already has an active call. Please try again shortly.");
+            }
         }
         if (calls.countBySessionIdAndCreatedAtAfter(visitor.id, Instant.now().minusSeconds(60)) >= 5)
             throw failure(HttpStatus.TOO_MANY_REQUESTS, "Too many call invitations. Please wait a minute.");
         VideoCall c = new VideoCall(); c.id = UUID.randomUUID().toString(); c.sessionId = visitor.id;
         c.profileId = profileId; c.state = "ringing"; c.offer = offer;
         c.createdAt = c.visitorHeartbeat = c.teamHeartbeat = Instant.now(); calls.save(c);
+        connections.notifyProfile(profileId,accounts.profileIdForWorkspace(visitor.id),"call","Incoming video call.");
         return view(c, "visitor");
     }
 
     public List<CallSummary> active(String token, String profileId, boolean team) {
+        if (!team) accounts.requireAccount(token);
         if (team && !profiles.existsById(profileId)) throw failure(HttpStatus.NOT_FOUND, "Profile not found");
-        var items = team ? calls.findByProfileIdAndStateInOrderByCreatedAtDesc(profileId, ACTIVE)
-            : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(session(token, false).id, ACTIVE);
+        String workspace=team ? null : session(token,false).id;
+        String own=team ? null : accounts.profileIdForWorkspace(workspace);
+        List<VideoCall> items=new ArrayList<>(team ? calls.findByProfileIdAndStateInOrderByCreatedAtDesc(profileId, ACTIVE)
+            : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(workspace, ACTIVE));
+        if (!team && own != null) items.addAll(calls.findByProfileIdAndStateInOrderByCreatedAtDesc(own,ACTIVE));
         return items.stream().filter(c -> !expired(c))
-            .filter(c -> !accounts.ownsWorkspaceProfile(c.sessionId, c.profileId)).limit(100)
-            .map(c -> new CallSummary(c.id, c.profileId, c.state, c.createdAt)).toList();
+            .filter(c -> isMatched(c.sessionId,c.profileId)).distinct().limit(100)
+            .map(c -> new CallSummary(c.id, !team && c.profileId.equals(own) ? accounts.profileIdForWorkspace(c.sessionId) : c.profileId,
+                c.state, c.createdAt,!team && c.profileId.equals(own))).toList();
     }
 
     public CallView get(String token, String id, boolean team) {
-        VideoCall c = authorized(token, id, team); expire(c);
+        Access access=authorized(token,id,team); VideoCall c=access.call(); team=access.receiver(); expire(c);
         if (ACTIVE.contains(c.state)) {
             if (team) c.teamHeartbeat = Instant.now(); else c.visitorHeartbeat = Instant.now();
         }
@@ -78,7 +97,7 @@ public class CollaborationService {
     }
 
     public CallView action(String token, String id, boolean team, String action, String answer) {
-        VideoCall c = authorized(token, id, team); expire(c);
+        Access access=authorized(token,id,team); VideoCall c=access.call(); team=access.receiver(); expire(c);
         if (!ACTIVE.contains(c.state)) {
             if ("end".equals(action) || "decline".equals(action)) return view(c, team ? "team" : "visitor");
             throw failure(HttpStatus.CONFLICT, "This call has already ended");
@@ -97,7 +116,7 @@ public class CollaborationService {
     }
 
     public void candidate(String token, String id, boolean team, String payload) {
-        VideoCall c = authorized(token, id, team); expire(c);
+        Access access=authorized(token,id,team); VideoCall c=access.call(); team=access.receiver(); expire(c);
         if (!ACTIVE.contains(c.state)) throw failure(HttpStatus.CONFLICT, "Call has ended");
         try {
             var value = json.readTree(payload);
@@ -108,15 +127,14 @@ public class CollaborationService {
         CallSignal s = new CallSignal(); s.callId = id; s.sender = sender; s.payload = payload; signals.save(s);
     }
 
-    private VideoCall authorized(String token, String id, boolean team) {
+    private Access authorized(String token, String id, boolean team) {
         String visitor = team ? null : session(token, false).id;
         VideoCall c = calls.lock(id).orElseThrow(() -> failure(HttpStatus.NOT_FOUND, "Call not found"));
-        if (!team && !c.sessionId.equals(visitor)) throw failure(HttpStatus.NOT_FOUND, "Call not found");
+        boolean receiver=team || c.profileId.equals(accounts.profileIdForWorkspace(visitor));
+        if (!team && !c.sessionId.equals(visitor) && !receiver) throw failure(HttpStatus.NOT_FOUND, "Call not found");
         // Passing a profile revokes access to its call, including team access.
         matched(c.sessionId, c.profileId);
-        if (team) sessions.findById(c.sessionId).map(s -> (VisitorSession) org.hibernate.Hibernate.unproxy(s))
-            .filter(s -> s.expiresAt.isAfter(Instant.now())).orElseThrow(() -> failure(HttpStatus.NOT_FOUND, "Visitor session expired"));
-        return c;
+        return new Access(c,receiver);
     }
 
     private CallView view(VideoCall c, String sender) {
@@ -141,12 +159,15 @@ public class CollaborationService {
     private void matched(String session, String profile) {
         if (accounts.ownsWorkspaceProfile(session, profile))
             throw failure(HttpStatus.FORBIDDEN, "You cannot call your own profile.");
-        if (swipes.findBySessionIdAndProfileId(session, profile).filter(s -> s.action != Swipe.Action.pass).isEmpty())
-            throw failure(HttpStatus.FORBIDDEN, "Match this profile before calling");
+        connections.acceptedBetween(accounts.profileIdForWorkspace(session),profile);
+    }
+    private boolean isMatched(String session,String profile) {
+        try { matched(session,profile); return true; } catch (ResponseStatusException ignored) { return false; }
     }
     private ResponseStatusException failure(HttpStatus status, String reason) { return new ResponseStatusException(status, reason); }
     public record Notice(long id, String profileId, String kind, String body, Instant createdAt, Instant readAt) {}
     public record Signal(long id, String payload) {}
-    public record CallSummary(String id, String profileId, String state, Instant createdAt) {}
+    private record Access(VideoCall call,boolean receiver) {}
+    public record CallSummary(String id, String profileId, String state, Instant createdAt, boolean incoming) {}
     public record CallView(String id, String profileId, String state, String offer, String answer, Instant createdAt, List<Signal> signals) {}
 }

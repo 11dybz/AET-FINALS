@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-  <title>Rizzume • Team Portfolio</title>
+  <title>Rizzume | Online Portfolio Showcase</title>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -19,11 +19,15 @@
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
   <!-- External Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=20261119-9">
-  <link rel="stylesheet" href="experience.css?v=20261119-9">
-  <link rel="stylesheet" href="auth.css?v=20261119-9">
-  <link rel="stylesheet" href="profile-editor.css?v=20261119-9">
-  <link rel="stylesheet" href="messages.css?v=20261119-9">
+  <link rel="stylesheet" href="style.css?v=20261120-1">
+  <link rel="stylesheet" href="experience.css?v=20261120-1">
+  <link rel="stylesheet" href="auth.css?v=20261120-1">
+  <link rel="stylesheet" href="profile-editor.css?v=20261120-1">
+  <link rel="stylesheet" href="messages.css?v=20261120-1">
+  <link rel="stylesheet" href="chat-location.css?v=20261120-3">
+  <link rel="stylesheet" href="connections.css?v=20261120-1">
+  <link rel="stylesheet" href="call-filters.css?v=20261120-3">
+  <link rel="stylesheet" href="call-controls.css?v=20261120-3">
 
   <style>
     /* 1. Guest Preview: hide workspace chrome and center Welcome + Preview screens */
@@ -143,7 +147,7 @@
       <h1 class="text-4xl font-black tracking-tight text-zinc-900">
         <span class="bg-gradient-to-r from-tinder-pink to-tinder-coral bg-clip-text text-transparent">Rizz</span><span class="bg-gradient-to-tr from-sky-500 via-tinder-super to-tinder-purple bg-clip-text text-transparent underline decoration-sky-400/50 decoration-4 underline-offset-4">u</span><span class="bg-gradient-to-r from-tinder-purple to-tinder-pink bg-clip-text text-transparent">me</span>
       </h1>
-      <p class="text-xs font-bold uppercase tracking-widest text-zinc-400">Team Portfolio &amp; Matching Experience</p>
+      <p class="text-xs font-bold uppercase tracking-widest text-zinc-400">Online Portfolio Showcase</p>
     </div>
 
     <div class="w-full bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-pink-100 shadow-soft my-8 space-y-4 text-left">
@@ -152,10 +156,10 @@
         <span>Welcome to our Showcase</span>
       </div>
       <h2 class="text-xl font-extrabold text-zinc-900 leading-snug">
-        Looking for developers? Choose how you want to browse our <span id="teamCountHome">4</span>-person team.
+        Discover people and projects. Choose how you want to explore all members.
       </h2>
       <p class="text-xs text-zinc-600 leading-relaxed">
-        Swipe through profiles in an endless loop with saved connections, or view the complete team directory directly.
+        Discover portfolios, save connections, or browse the complete member directory.
       </p>
 
       <div class="space-y-3 pt-2">
@@ -179,7 +183,7 @@
             </div>
             <div class="text-left">
               <span class="block">Skip Swiping (All Profiles)</span>
-              <span class="block text-[10px] font-medium text-zinc-400">View all <span id="teamCountButton">4</span> engineers at once</span>
+              <span class="block text-[10px] font-medium text-zinc-400">View all members and their portfolios</span>
             </div>
           </div>
           <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
@@ -201,7 +205,7 @@
     </div>
 
     <div class="flex items-center justify-center gap-6 text-[11px] font-bold text-zinc-400">
-      <span><span id="teamCountFooter">4</span> Developers</span>
+      <span>All Members</span>
       <span>•</span>
       <span>Full Stack &amp; ML</span>
       <span>•</span>
@@ -229,7 +233,7 @@
         <button data-requires-backend type="button" onclick="openProfileEditor()" class="px-3 py-1.5 rounded-full bg-tinder-pink text-white shadow-sm text-xs font-bold">+ Add card</button>
         <button onclick="handleGuardedClick(() => toggleMatchesDrawer(true))" class="relative px-3 py-1.5 rounded-full bg-white border border-pink-100 shadow-sm flex items-center gap-2 text-zinc-700 hover:text-tinder-pink font-bold text-xs">
           <i data-lucide="heart" class="w-3.5 h-3.5 text-tinder-pink fill-tinder-pink"></i>
-          <span>Matches</span>
+          <span>Connections</span>
           <span id="matchBadge" class="w-4 h-4 rounded-full bg-tinder-pink text-white text-[9px] font-black flex items-center justify-center">0</span>
         </button>
         <button onclick="handleGuardedClick(() => openChat())" class="relative w-9 h-9 min-h-11 rounded-full bg-white border border-pink-100 shadow-sm flex items-center justify-center text-zinc-600 hover:text-tinder-pink" aria-label="Open messages">
@@ -253,7 +257,7 @@
           <div class="flex flex-col gap-2.5 w-full max-w-xs mt-6">
             <button data-requires-backend type="button" onclick="openProfileEditor()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-tinder-pink to-tinder-orange text-white text-xs font-bold shadow-glow-pink">+ Create Profile</button>
             <button onclick="toggleMatchesDrawer(true)" class="w-full py-3 rounded-2xl bg-zinc-100 text-zinc-700 text-xs font-bold hover:bg-zinc-200">
-              View Matched Developers
+              View connections and requests
             </button>
           </div>
         </div>
@@ -307,7 +311,7 @@
         <h2 class="text-2xl font-black text-zinc-900">
           The <span class="bg-gradient-to-r from-tinder-pink to-tinder-coral bg-clip-text text-transparent">Rizz</span><span class="bg-gradient-to-tr from-sky-500 via-tinder-super to-tinder-purple bg-clip-text text-transparent">u</span><span class="bg-gradient-to-r from-tinder-purple to-tinder-pink bg-clip-text text-transparent">me</span> Roster
         </h2>
-        <p class="text-xs font-semibold text-zinc-500">Explore all <span id="directoryCount">4</span> team members</p>
+        <p class="text-xs font-semibold text-zinc-500">Explore all members and their portfolios</p>
       </div>
       <div class="flex items-center gap-2">
         <button data-requires-backend type="button" onclick="openProfileEditor()" class="px-4 py-2 rounded-xl bg-tinder-pink text-white font-bold text-xs">+ Add card</button>
@@ -341,7 +345,7 @@
         </div>
 
         <div class="bg-zinc-50 rounded-2xl p-3 border border-zinc-100 text-[11px] text-zinc-500 space-y-1">
-          <p>✅ Full access to all 4 IT/CS engineers</p>
+          <p>✅ Full access to all member portfolios</p>
           <p>✅ Payable via GCash, Maya, or 3 Sacks of Rice</p>
         </div>
 
@@ -388,7 +392,7 @@
   <div id="matchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
     <div class="w-full max-w-sm bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 text-center shadow-2xl transform scale-90 transition-transform duration-300" id="matchModalBox">
       <div class="text-4xl font-black italic tracking-tighter bg-gradient-to-r from-tinder-pink via-tinder-orange to-yellow-400 bg-clip-text text-transparent my-2 animate-bounce">
-        It's a Match!
+        You're connected!
       </div>
       <p id="matchModalSubtitle" class="text-zinc-300 text-xs mt-1 leading-relaxed"></p>
 
@@ -421,23 +425,29 @@
 
   <!-- SAVED MATCHES DRAWER -->
   <div id="matchesDrawerBackdrop" onclick="toggleMatchesDrawer(false)" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-300"></div>
-  <aside id="matchesDrawer" class="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
+  <aside id="matchesDrawer" role="dialog" aria-modal="true" aria-labelledby="connectionsTitle" aria-hidden="true" class="fixed top-0 right-0 h-full w-full max-w-sm bg-white z-50 shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
     <div class="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/60">
       <div class="flex items-center gap-2.5">
         <div class="w-8 h-8 rounded-full bg-tinder-pink/10 text-tinder-pink flex items-center justify-center">
           <i data-lucide="heart-handshake" class="w-4 h-4"></i>
         </div>
         <div>
-          <h3 class="font-extrabold text-sm text-zinc-900">Your Matches</h3>
-          <p class="text-[11px] text-zinc-400">Swiped right or super-liked</p>
+          <h3 id="connectionsTitle" class="font-extrabold text-sm text-zinc-900">Your connections</h3>
+          <p class="text-[11px] text-zinc-400">Good work starts with a mutual yes.</p>
         </div>
       </div>
-      <button onclick="toggleMatchesDrawer(false)" class="w-8 h-8 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-800 flex items-center justify-center">
-        <i data-lucide="x" class="w-4 h-4"></i>
+      <button type="button" data-close-connections onclick="toggleMatchesDrawer(false)" class="rz-icon-button" aria-label="Close connections">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
       </button>
     </div>
 
-    <div id="matchesList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div class="rz-connection-tabs" role="group" aria-label="Connection lists">
+      <button type="button" data-connection-tab="accepted" aria-pressed="true">Connections <span>0</span></button>
+      <button type="button" data-connection-tab="incoming" aria-pressed="false">Incoming <span>0</span></button>
+      <button type="button" data-connection-tab="outgoing" aria-pressed="false">Sent <span>0</span></button>
+    </div>
+    <div class="rz-connection-toolbar"><p id="connectionStatus" role="status" aria-live="polite"></p><button id="refreshConnections" type="button">Refresh</button></div>
+    <div id="matchesList" class="flex-1 overflow-y-auto p-4 space-y-3" aria-live="polite"></div>
 
     <div class="p-4 border-t border-zinc-100 bg-zinc-50 space-y-2">
       <button onclick="copyTeamContact()" class="w-full py-3 bg-zinc-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all">
@@ -465,7 +475,7 @@
         <div class="ms-disabled-composer"><div><button type="button" onclick="showToast('Select a Match', 'Open a conversation before sharing a location.')" aria-label="Choose a conversation before sharing a location"><i data-lucide="map-pin"></i></button><span>Choose a conversation to send a message</span><button type="button" onclick="showToast('Select a Match', 'Choose a conversation from the left first.')" aria-label="Choose a conversation before sending"><i data-lucide="send"></i></button></div><p>Messages and video calls live here, once you connect.</p></div>
       </div>
       <div id="threadView" class="ms-thread hidden">
-        <header class="ms-thread-header"><button id="chatListButton" type="button" onclick="showConversationList()" class="ms-icon-button ms-list-back" aria-label="Back to conversations"><i data-lucide="arrow-left"></i></button><div class="ms-thread-avatar"><img id="chatAvatar" alt=""><span id="chatAvatarFallback"></span></div><div class="ms-thread-identity"><h3 id="chatTitle">Conversation</h3><p id="chatSubtitle"></p></div><div class="ms-thread-actions"><button id="chatVideoButton" type="button" class="ms-icon-button" aria-label="Start video call" title="Start video call"><i data-lucide="video"></i></button><button id="chatMapButton" type="button" class="ms-icon-button" aria-label="Open location map" title="Location"><i data-lucide="map-pin"></i></button></div></header>
+        <header class="ms-thread-header"><button id="chatListButton" type="button" onclick="showConversationList()" class="ms-icon-button ms-list-back" aria-label="Back to conversations"><i data-lucide="arrow-left"></i></button><div class="ms-thread-avatar"><img id="chatAvatar" alt=""><span id="chatAvatarFallback"></span></div><div class="ms-thread-identity"><h3 id="chatTitle">Conversation</h3><p id="chatSubtitle"></p></div><div class="ms-thread-actions"><button id="chatAudioButton" type="button" class="ms-icon-button" aria-label="Start voice call" title="Start voice call"><i data-lucide="phone"></i></button><button id="chatVideoButton" type="button" class="ms-icon-button" aria-label="Start video call" title="Start video call"><i data-lucide="video"></i></button><button id="chatMapButton" type="button" class="ms-icon-button" aria-label="Share location" title="Share location"><i data-lucide="map-pin"></i></button></div></header>
         <div class="ms-message-area"><div id="threadLoadNotice" class="ms-notice" hidden role="status"><span>Could not refresh this conversation.</span><button type="button" onclick="pollChatMessages(true)">Retry</button></div><div id="messageLog" class="ms-message-log" role="log" aria-live="polite" aria-label="Conversation messages"></div><div id="threadState" class="ms-thread-state" role="status"><div class="ms-thread-state-icon"><i data-lucide="message-circle"></i></div><h3 id="threadStateTitle">Loading your conversation…</h3><p id="threadStateText">Getting everything ready.</p><button id="threadLoadRetry" type="button" class="ms-secondary" onclick="pollChatMessages(true)" hidden>Try again</button></div><button id="newMessagesPill" type="button" onclick="scrollChatToBottom(true)" class="ms-new-messages hidden">New messages ↓</button></div>
         <div class="ms-composer"><div id="chatError" class="ms-send-error hidden" role="alert"><span id="chatErrorText"></span><button id="chatRetryButton" type="button" onclick="retryChatSend()">Retry</button></div><div class="ms-composer-row"><label for="chatComposer" class="sr-only">Message</label><textarea id="chatComposer" rows="1" maxlength="1000" placeholder="Write a message…" onkeydown="chatComposerKeydown(event)" oninput="chatComposerInput()" disabled></textarea><button id="chatSendButton" type="button" onclick="sendChatMessage()" class="ms-send" aria-label="Send message" disabled><i data-lucide="arrow-up"></i></button></div><div class="ms-composer-meta"><span>Enter to send · Shift + Enter for a new line</span><span><span id="chatCharacterCount">0</span>/1000</span></div></div>
       </div>
@@ -474,37 +484,43 @@
 
   <!-- FULL PROFILE SCREEN OVERLAY -->
   <section id="fullProfileScreen" class="fixed inset-0 z-50 bg-white overflow-y-auto hidden flex-col">
-    <div class="w-full max-w-xl mx-auto px-5 py-6 flex-1 flex flex-col">
+    <div class="detail-shell w-full max-w-xl mx-auto px-5 py-6 flex-1 flex flex-col">
+      <div class="detail-topbar">
       <button onclick="closeProfileScreen()" class="self-start px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center gap-1.5 transition-colors mb-4">
         <i data-lucide="arrow-left" class="w-4 h-4"></i>
         <span>Back</span>
       </button>
+      <div id="detailManagementActions" class="detail-management"></div>
+      </div>
+      <div id="detailCover" class="detail-cover" aria-hidden="true"><span>PORTFOLIO</span></div>
+      <section id="detailGallery" class="detail-gallery" aria-label="Portfolio photos" hidden></section>
 
-      <div class="flex items-center gap-4 border-b border-zinc-100 pb-5">
-        <img id="detailHeroImage" src="" alt="Profile" class="w-20 h-20 rounded-2xl object-cover shadow-soft border-2 border-tinder-pink" />
-        <div>
+      <div class="detail-identity">
+        <div class="detail-avatar"><span id="detailHeroInitials" aria-hidden="true"></span><img id="detailHeroImage" alt="" hidden /></div>
+        <div class="detail-identity-text">
           <span id="detailPersonaBadge" class="text-[10px] font-black uppercase text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-1"></span>
           <h2 id="detailHeroName" class="text-xl font-black text-zinc-900"></h2>
           <p id="detailHeroRole" class="text-xs font-bold text-tinder-pink"></p>
+          <p id="detailHeroLocation" class="detail-location" hidden></p>
         </div>
       </div>
 
-      <div class="mt-5 space-y-2">
+      <div class="detail-section mt-5 space-y-2">
         <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">About</h3>
         <p id="detailFullBio" class="text-xs text-zinc-600 leading-relaxed"></p>
       </div>
 
-      <div class="mt-6 space-y-3">
+      <div class="detail-section mt-6 space-y-3">
         <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">Featured Projects</h3>
         <div id="detailProjectItems" class="space-y-2.5"></div>
       </div>
 
-      <div class="mt-6 space-y-2">
+      <div class="detail-section mt-6 space-y-2">
         <h3 class="text-xs font-black uppercase tracking-wider text-zinc-400">Core Stack</h3>
         <div id="detailSkillsContainer" class="flex flex-wrap gap-1.5"></div>
       </div>
 
-      <div class="mt-8 pt-5 border-t border-zinc-100 flex flex-wrap items-center justify-between gap-3">
+      <div class="detail-contact mt-8 pt-5 border-t border-zinc-100 flex flex-wrap items-center justify-between gap-3">
         <div class="flex gap-4">
           <a id="detailGithubLink" href="#" target="_blank" rel="noopener" class="text-xs font-bold text-zinc-600 hover:text-zinc-900 flex items-center gap-1">
             <i data-lucide="github" class="w-4 h-4"></i> GitHub
@@ -581,13 +597,17 @@
     <p id="toastMessage" class="text-xs font-bold">Swiped Right!</p>
   </div>
 
-  <script src="account.js?v=20261119-9"></script>
-  <script src="script.js?v=20261119-9"></script>
-  <script src="messages.js?v=20261119-9"></script>
+  <script src="account.js?v=20261120-1"></script>
+  <script src="script.js?v=20261120-1"></script>
+  <script src="messages.js?v=20261120-3"></script>
   <script src="resume.js?v=20261118-1"></script>
-  <script src="editor.js?v=20261119-9"></script>
-  <script src="ui.js"></script>
-  <script src="calls.js"></script>
-  <script src="experience.js?v=20261119-9"></script>
+  <script src="editor.js?v=20261120-1"></script>
+  <script src="ui.js?v=20261120-3"></script>
+  <script src="chat-location.js?v=20261120-3"></script>
+  <script src="connections.js?v=20261120-2"></script>
+  <script src="call-filters.js?v=20261120-3"></script>
+  <script src="camera-kit.js?v=20261120-4"></script>
+  <script src="calls.js?v=20261120-4"></script>
+  <script src="experience.js?v=20261120-3"></script>
 </body>
 </html>

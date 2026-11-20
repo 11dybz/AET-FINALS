@@ -37,20 +37,22 @@ Authentication and portfolio checks against isolated H2 databases, without openi
 
 The frontend opens into a Tinder-inspired discovery deck, with desktop navigation and a mobile bottom bar. Preferences filter the deck by name, skill, role, or city. The directory and profile editor remain available under **Explore the team**.
 
-To enable video calling and the protected team inbox, set a private team key in the same PowerShell terminal before starting Spring Boot:
+Account-to-account calls work after connection acceptance. To enable the optional protected administrative team inbox, set a private team key in the same PowerShell terminal before starting Spring Boot:
 
 ```powershell
 $env:TEAM_INBOX_KEY = "replace-with-your-private-team-key"
 .\mvnw.cmd spring-boot:run
 ```
 
-A visitor likes a profile, opens **Messages**, selects that conversation, and clicks **Video call**. The team member opens `/team-inbox.html`, enters the same key, selects their profile, and clicks **Load conversations**. Incoming calls offer **Answer** and **Decline**. Both participants must keep the page open. Camera and microphone access occurs only after starting or answering; closing, ending, declining, or failed calls releases the devices. Calls time out after 90 seconds without an answer, after 60 seconds without either participant's heartbeat, or at one hour. Sessions and matches are checked on every signaling request. Invitations are limited to five per visitor per minute. A blank `TEAM_INBOX_KEY` disables new invitations and displays an explanation before requesting camera access.
+A signed-in user creates a profile and sends a connection request. The recipient accepts it under **Connections → Incoming**. Both people can then open **Messages**, select each other, and start or answer a video call in their normal account workspace. Pending requests cannot message or call. The team inbox remains an optional trusted administrative interface and requires its key; ordinary users never need that key.
+
+Both participants must keep the page open. Camera and microphone access occurs only after starting or answering. Closing, ending, declining, removing the connection, or failed calls releases the devices. Calls time out after 90 seconds without an answer, after 60 seconds without either participant's heartbeat, or at one hour. Both account ownership and the accepted connection are checked on every signaling request. Invitations are limited to five per caller per minute, and busy participants cannot start overlapping calls.
 
 Camera, microphone, browser alerts, and device location require browser support and permissions. For remote devices serve the app over HTTPS. STUN is configured by default; for reliable calling across restrictive networks set `TURN_URL` (for example `turn:your-relay.example:3478`), `TURN_USERNAME`, and `TURN_PASSWORD` to your own relay's settings. ICE configuration is sent to authorized call participants; use scoped, short-lived relay credentials for public hosting. No recording feature is implemented. Browser lifecycle tests mock media; actual two-device media and relay connectivity must also be checked on the intended deployment.
 
 **Location** embeds OpenStreetMap. Supported profile cities use city-center pins; they do not represent live positions. **Use my location** requests a one-time approximate device position and keeps it in page memory. It is supplied to OpenStreetMap to render the map, and is sent to a conversation only by clicking **Share in this chat**. **Clear my location** clears the local position. Unsupported cities have an external map-search link. Map viewing needs internet access.
 
-Notifications for newly saved matches, team replies, and team call actions are persisted per visitor. **Mark all read** only marks items through the most recent displayed ID, preserving replies that arrive during the request. The latest 100 items are shown. Optional browser alerts poll while the page is open; they are not background push notifications and do not operate after the page is closed.
+Notifications for connection requests, accepted connections, messages and call updates are persisted per account workspace. Responding to a request clears the pending request notice; reading a conversation clears its message notices. **Mark all read** only marks items through the most recent displayed ID, preserving replies that arrive during the request. The latest 100 items are shown. Optional browser alerts poll while the page is open; they are not background push notifications and do not operate after the page is closed.
 
 V5 adds the call, ICE signaling, and notification tables to H2 and PostgreSQL. Profile/session deletion cascades to these new rows. Restart the backend after pulling changes so Flyway applies V5 and loads the new controllers; refreshing the browser alone cannot load new Java classes.
 
@@ -85,7 +87,7 @@ All paths below are prefixed with `/api`.
 | GET | `/images/{imageId}` | Stream an uploaded image with its verified content type and immutable cache headers |
 | POST | `/session` | Create/resume an anonymous visitor session and set an HttpOnly cookie |
 | PUT | `/me/swipes/{profileId}` | Save `{ "action": "pass" }`, `like`, or `super_like` |
-| GET | `/me/matches` | Return liked and super-liked profiles for the visitor cookie; `isSuper` appears only here |
+| GET | `/me/matches` | Return accepted connections only for the visitor cookie; `isSuper` appears only here |
 | GET | `/team` | Return the team name and contact email |
 
 Profile JSON preserves the established `tags`, `dealbreakers`, and `details` object shape. Project descriptions are exposed as `details.projects[].desc`. A profile also has `images: [{ "id": 12, "url": "/api/images/12" }]`; URL-backed gallery entries return their external URL. The legacy `image` property remains the cover-image field and always matches the first ordered gallery URL, or `null` if there are no images.
@@ -136,7 +138,7 @@ java -jar target/pitchr-backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=supa
 
 The Supabase profile requires the three connection properties and never falls back to H2. It enables encrypted PostgreSQL connections (`sslmode=require`) and uses a five-connection application pool. For certificate verification, use `sslmode=verify-full` and the database CA certificate as described in [Supabase's connection documentation](https://supabase.com/docs/guides/database/connecting-to-postgres).
 
-On the first successful connection, Flyway creates the **pitchr** schema and its tables and seeds the four members. Hibernate validates the schema; it does not automatically rewrite tables. Use a database role that can create and own this schema. Existing objects in `public`, `auth`, and `storage` are not used by this application. Keep `pitchr` out of the Supabase Data API's exposed schemas; the frontend should use Spring Boot's `/api` endpoints, which enforce visitor ownership. Supabase Auth is not part of this database connection; anonymous visitor cookies continue to work as before.
+On the first successful connection, Flyway creates the **pitchr** schema and its tables and seeds the four members. Hibernate validates the schema; it does not automatically rewrite tables. Use a database role that can create and own this schema. Existing objects in `public`, `auth`, and `storage` are not used by this application. Keep `pitchr` out of the Supabase Data API's exposed schemas; the frontend should use Spring Boot's `/api` endpoints, which enforce visitor ownership. Supabase Auth is not part of this database connection. Public preview remains available, while requests, connections, messages and calls require an application account.
 
 Check the connection after startup:
 
@@ -154,7 +156,7 @@ The Supabase project stores new profiles, sessions, and swipes independently of 
 | GET | `/api/profiles/{id}` | One full profile, or 404 |
 | POST | `/api/session` | Create/resume anonymous visitor; sets HttpOnly cookie; returns `expiresAt` |
 | PUT | `/api/me/swipes/{profileId}` | Save/update `{ "action": "pass" }`, `like`, or `super_like` |
-| GET | `/api/me/matches` | Full liked/super-liked profiles with `isSuper` |
+| GET | `/api/me/matches` | Accepted counterpart profiles with `isSuper` |
 | GET | `/api/team` | Team `name` and `email` |
 
 Profile JSON retains the frontend's `tags`, `dealbreakers`, and `details` structure, including project `title` and `desc`. Profiles do not contain an `isSuper` property until returned as matches.
@@ -162,12 +164,16 @@ Profile JSON retains the frontend's `tags`, `dealbreakers`, and `details` struct
 Swipe response:
 
 ```json
-{"profileId":"chee-reynaldo","action":"super_like","matched":true,"isSuper":true}
+{"profileId":"chee-reynaldo","action":"super_like","matched":false,"isSuper":true,"status":"pending","direction":"outgoing"}
 ```
 
-Matches are saved developers, without mutual approval. A session has one decision per profile: retrying a PUT is safe, `super_like` upgrades a like, and `pass` removes an existing match. Reloading the frontend deck should simply reuse the roster; it does not delete matches. The full roster is always returned, even for profiles previously passed or liked.
+A like or super like now creates a pending connection request. Only the recipient can accept or decline, only the sender can cancel, and either accepted participant can remove the connection. Crossed requests remain pending until explicitly accepted. `pass` records a discovery skip and does not remove an accepted connection. `GET /api/me/matches` is a compatibility endpoint for accepted connections only.
 
-Sessions expire after 30 days, with a fixed expiry. Expired/unknown cookies are replaced by POST `/api/session`. Protected endpoints return 401 for missing/invalid/expired sessions. Visitors are isolated by their opaque cookie; clearing cookies starts a fresh visitor. Expired rows are retained locally; add scheduled cleanup before long-running public deployment.
+`GET /api/me/connections` returns relationship views with the other profile, `status`, `direction`, `priority`, timestamps, and `ownerAvailable`. `POST /api/me/connection-requests/{profileId}` accepts `{ "priority": false }`. `POST /api/me/connections/{profileId}/action` accepts `{ "action": "accept" }`, `decline`, `cancel` or `remove`. Requests require an account with its own profile; self-requests and unauthorized actions are rejected. Closed requests have a one-minute resend cooldown.
+
+Messaging is a shared thread for the pair. Responses expose `visitor` as the current user's own messages and `member` as the counterpart's messages, regardless of who originally sent the request. Removal closes message/call access for both people and preserves history for a future accepted request. Missing or expired authentication returns 401. Account sessions last seven days; logging out invalidates the credential and ends incoming and outgoing calls while preserving requests, connections and messages.
+
+V9 migrates saved likes from accounts with owned profiles into pending requests and merges reverse legacy message threads while preserving authors, timestamps, ids and read receipts. It does not infer mutual consent. Unlinked seeded cards wait for a verified owner account before requests can be accepted.
 
 Bad/missing actions return 400; unknown profiles return 404. Errors include `timestamp`, `status`, `message`, and `path`. API responses use `Cache-Control: no-store`.
 
@@ -176,11 +182,13 @@ Bad/missing actions return 400; unknown profiles return 404. Errors include `tim
 ```powershell
 $base = 'http://localhost:8080/api'
 Invoke-RestMethod "$base/profiles"
-Invoke-RestMethod "$base/session" -Method Post -SessionVariable visitor
-Invoke-RestMethod "$base/me/swipes/chee-reynaldo" -Method Put `
-    -WebSession $visitor -ContentType 'application/json' `
-    -Body '{"action":"super_like"}'
-Invoke-RestMethod "$base/me/matches" -WebSession $visitor
+# Register a test account, then create its own profile.
+$registration = @{name='Test Developer';email='your-test-email@example.com';password='Choose-your-test-password';confirmPassword='Choose-your-test-password'} | ConvertTo-Json
+Invoke-RestMethod "$base/auth/register" -Method Post -SessionVariable visitor -ContentType 'application/json' -Body $registration
+Invoke-RestMethod "$base/profiles" -Method Post -WebSession $visitor -ContentType 'application/json' -Body '{"name":"Test Developer","age":22}'
+Invoke-RestMethod "$base/me/connection-requests/chee-reynaldo" -Method Post -WebSession $visitor -ContentType 'application/json' -Body '{"priority":false}'
+Invoke-RestMethod "$base/me/connections" -WebSession $visitor
+# The recipient must log in and accept under Incoming before messaging is available.
 ```
 
 ## Frontend connection

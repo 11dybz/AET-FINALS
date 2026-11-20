@@ -36,12 +36,14 @@ public class PortfolioService {
     private final MessageRepository messages;
     private final CollaborationService collaboration;
     private final AccountService accounts;
+    private final ConnectionService connections;
     private final int sessionDays;
     private final Map<String, Deque<Instant>> sendWindows = new ConcurrentHashMap<>();
 
     public PortfolioService(ProfileRepository profiles, SessionRepository sessions, SwipeRepository swipes,
                             ProfileImageRepository images, ProfileImageBlobRepository imageBlobs,
-                            MessageRepository messages, CollaborationService collaboration, AccountService accounts, @Value("${pitchr.session-days}") int sessionDays) {
+                            MessageRepository messages, CollaborationService collaboration, AccountService accounts,
+                            ConnectionService connections, @Value("${pitchr.session-days}") int sessionDays) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.swipes = swipes;
@@ -50,6 +52,7 @@ public class PortfolioService {
         this.messages = messages;
         this.collaboration = collaboration;
         this.accounts = accounts;
+        this.connections = connections;
         this.sessionDays = sessionDays;
     }
 
@@ -188,13 +191,8 @@ public class PortfolioService {
     }
 
     public List<ProfileResponse> matches(String token) {
-        VisitorSession session = requireSession(token, false);
-        String ownProfileId = accounts.profileIdForWorkspace(session.id);
-        List<Swipe> matched = swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
-            .filter(s -> s.action != Swipe.Action.pass && !s.profile.id.equals(ownProfileId)).toList();
-        Map<String, List<ProfileImage>> galleries = galleries(matched.stream().map(s -> s.profile.id).toList());
-        return matched.stream().map(s -> ProfileResponse.from(s.profile, s.action == Swipe.Action.super_like,
-            galleries.getOrDefault(s.profile.id, List.of()))).toList();
+        return connections.list(token).stream().filter(c -> c.status().equals("accepted"))
+            .map(ConnectionService.View::profile).toList();
     }
 
     @Transactional
@@ -206,10 +204,13 @@ public class PortfolioService {
             throw badRequest("action must be pass, like, or super_like");
         }
         if (action == null) throw badRequest("action must be pass, like, or super_like");
-        VisitorSession session = requireSession(token, true);
-        Profile profile = requireProfile(profileId);
+        accounts.requireAccount(token);
+        VisitorSession session = requireSession(token, false);
+        Profile profile = action == Swipe.Action.pass ? requireProfileForUpdate(profileId) : requireProfile(profileId);
         if (action != Swipe.Action.pass && accounts.ownsWorkspaceProfile(session.id, profileId))
             throw badRequest("You cannot match with your own profile.");
+        ConnectionService.View relationship = action == Swipe.Action.pass ? null
+            : connections.request(token,profileId,action == Swipe.Action.super_like);
         Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseGet(() -> {
             Swipe created = new Swipe();
             created.session = session;
@@ -217,63 +218,103 @@ public class PortfolioService {
             created.createdAt = Instant.now();
             return created;
         });
-        boolean newlyMatched = action != Swipe.Action.pass && (swipe.id == null || swipe.action == Swipe.Action.pass);
         swipe.action = action;
         swipe.updatedAt = Instant.now();
         swipes.save(swipe);
-        if (action == Swipe.Action.pass) collaboration.revokeCalls(session.id, profileId);
-        if (newlyMatched) collaboration.notify(session.id, profileId, "match", "You saved " + profile.name + ". Say hello or invite them to a video call.");
-        return new SwipeResult(profileId, action, action != Swipe.Action.pass, action == Swipe.Action.super_like);
+        return new SwipeResult(profileId, action, relationship != null && relationship.status().equals("accepted"),
+            action == Swipe.Action.super_like,relationship == null ? "passed" : relationship.status(),
+            relationship == null ? null : relationship.direction());
     }
 
     public List<ConversationResponse> conversations(String token) {
-        VisitorSession session = requireSession(token, false);
-        String ownProfileId = accounts.profileIdForWorkspace(session.id);
-        return swipes.findBySessionIdOrderByCreatedAtAscIdAsc(session.id).stream()
-            .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
-            .filter(s -> !s.profile.id.equals(ownProfileId))
-            .map(swipe -> {
-                List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(session.id, swipe.profile.id);
-                Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
-                long unread = thread.stream().filter(m -> m.sender == Message.Sender.member && m.readAt == null).count();
-                return new ConversationResponse(response(swipe.profile, swipe.action == Swipe.Action.super_like),
-                    last == null ? null : MessageResponse.from(last), unread);
+        return connections.list(token).stream().filter(c -> c.status().equals("accepted"))
+            .map(c -> {
+                var access=connections.thread(token,c.profile().id());
+                List<Message> thread=messages.findBySessionIdAndProfileIdOrderByIdAsc(access.sessionId(),access.profileId());
+                Message last=thread.isEmpty() ? null : thread.get(thread.size()-1);
+                long unread=thread.stream().filter(m -> m.sender != access.side() && m.readAt == null).count();
+                return new ConversationResponse(c.profile(),last == null ? null : MessageResponse.from(last,access.side()),unread);
             }).toList();
     }
 
     public List<MessageResponse> conversationMessages(String token, String profileId, long afterId) {
-        VisitorSession session = requireSession(token, false);
-        requireMatched(session, profileId);
+        var access=connections.thread(token,profileId);
         List<Message> thread = afterId <= 0
-            ? messages.findBySessionIdAndProfileIdOrderByIdAsc(session.id, profileId)
-            : messages.findBySessionIdAndProfileIdAndIdGreaterThanOrderByIdAsc(session.id, profileId, afterId);
-        return thread.stream().map(MessageResponse::from).toList();
+            ? messages.findBySessionIdAndProfileIdOrderByIdAsc(access.sessionId(),access.profileId())
+            : messages.findBySessionIdAndProfileIdAndIdGreaterThanOrderByIdAsc(access.sessionId(),access.profileId(),afterId);
+        return thread.stream().map(m -> MessageResponse.from(m,access.side())).toList();
     }
 
     @Transactional
     public MessageResponse sendVisitorMessage(String token, String profileId, String body) {
-        VisitorSession session = requireSession(token, true);
-        requireMatched(session, profileId);
+        VisitorSession session = requireSession(token, false);
+        var access=connections.threadForWrite(token,profileId);
         String clean = body == null ? "" : body.trim();
         if (clean.isEmpty() || clean.length() > 1000) throw badRequest("body must be 1-1000 characters");
         if (!checkRateLimit(session.id)) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Message limit reached");
         Message message = new Message();
-        message.session = session;
-        message.profile = requireProfile(profileId);
-        message.sender = Message.Sender.visitor;
+        message.session = sessions.findById(access.sessionId()).orElseThrow();
+        message.profile = requireProfile(access.profileId());
+        message.sender = access.side();
         message.body = clean;
         message.createdAt = Instant.now();
-        return MessageResponse.from(messages.save(message));
+        String own=accounts.requireAccount(token).profileId;
+        connections.notifyProfile(profileId,own,"message",clean);
+        return MessageResponse.from(messages.save(message),access.side());
+    }
+
+    public List<MessageResponse> locations(String token, String profileId) {
+        var access = connections.thread(token, profileId);
+        return messages.findBySessionIdAndProfileIdAndLocationExpiresAtIsNotNullOrderByIdAsc(access.sessionId(), access.profileId())
+            .stream().map(m -> MessageResponse.from(m, access.side())).toList();
+    }
+
+    @Transactional
+    public MessageResponse shareLocation(String token, String profileId, double latitude, double longitude, String name, int minutes) {
+        if (!Double.isFinite(latitude) || !Double.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180
+            || (minutes != 15 && minutes != 60) || name == null || name.isBlank() || name.length() > 100)
+            throw badRequest("Choose a valid location and a duration of 15 or 60 minutes.");
+        var access = connections.threadForWrite(token, profileId);
+        // Use the existing consent, notification and message rate-limit path. Coordinates never enter the body or notifications.
+        MessageResponse sent = sendVisitorMessage(token, profileId, "Shared an approximate location");
+        Message message = messages.findById(sent.id()).orElseThrow();
+        // A replacement ends this sender's previous active shares in the same conversation.
+        for (Message previous : messages.findBySessionIdAndProfileIdAndLocationExpiresAtIsNotNullOrderByIdAsc(access.sessionId(), access.profileId())) {
+            if (previous.sender == access.side() && previous.locationStoppedAt == null && previous.locationExpiresAt.isAfter(Instant.now()))
+                eraseLocation(previous);
+        }
+        message.locationLat = Math.round(latitude * 1000d) / 1000d;
+        message.locationLon = Math.round(longitude * 1000d) / 1000d;
+        message.locationName = name.trim();
+        message.locationExpiresAt = Instant.now().plusSeconds(minutes * 60L);
+        return MessageResponse.from(message, access.side());
+    }
+
+    @Transactional
+    public MessageResponse stopLocation(String token, String profileId, long id) {
+        var access = connections.threadForWrite(token, profileId);
+        Message message = messages.findByIdAndSessionIdAndProfileIdAndLocationExpiresAtIsNotNull(id, access.sessionId(), access.profileId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Location share not found."));
+        if (message.sender != access.side()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only stop your own location share.");
+        eraseLocation(message);
+        return MessageResponse.from(message, access.side());
+    }
+
+    private void eraseLocation(Message message) {
+        if (message.locationStoppedAt == null) message.locationStoppedAt = Instant.now();
+        message.locationLat = null; message.locationLon = null; message.locationName = null;
     }
 
     @Transactional
     public void markConversationRead(String token, String profileId) {
-        VisitorSession session = requireSession(token, true);
-        requireMatched(session, profileId);
+        requireSession(token, false);
+        var access=connections.threadForWrite(token,profileId);
         Instant now = Instant.now();
-        for (Message message : messages.findBySessionIdAndProfileIdAndSenderAndReadAtIsNull(session.id, profileId, Message.Sender.member)) {
+        Message.Sender incoming=access.side() == Message.Sender.member ? Message.Sender.visitor : Message.Sender.member;
+        for (Message message : messages.findBySessionIdAndProfileIdAndSenderAndReadAtIsNull(access.sessionId(),access.profileId(),incoming)) {
             message.readAt = now;
         }
+        connections.readMessageNotices(accounts.requireAccount(token).profileId,profileId);
     }
 
     @Transactional
@@ -294,20 +335,18 @@ public class PortfolioService {
     }
 
     public List<TeamConversationResponse> teamConversations(String profileId) {
-        return swipes.findAll().stream()
-            .filter(s -> s.session.expiresAt.isAfter(Instant.now()))
-            .filter(s -> s.action == Swipe.Action.like || s.action == Swipe.Action.super_like)
-            .filter(s -> profileId == null || profileId.isBlank() || s.profile.id.equals(profileId))
-            .filter(s -> !accounts.ownsWorkspaceProfile(s.session.id, s.profile.id))
-            .map(swipe -> {
-                List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(swipe.session.id, swipe.profile.id);
+        return connections.acceptedThreads().stream()
+            .filter(c -> profileId == null || profileId.isBlank() || c.threadProfileId.equals(profileId))
+            .map(c -> {
+                List<Message> thread = messages.findBySessionIdAndProfileIdOrderByIdAsc(c.threadSessionId,c.threadProfileId);
                 Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
-                return new TeamConversationResponse(swipe.session.id, response(swipe.profile, swipe.action == Swipe.Action.super_like),
+                return new TeamConversationResponse(c.threadSessionId, response(requireProfile(c.threadProfileId),c.priority),
                     last == null ? null : MessageResponse.from(last));
             }).toList();
     }
 
     public List<MessageResponse> teamConversationMessages(String sessionId, String profileId) {
+        connections.acceptedThread(sessionId,profileId);
         requireProfile(profileId);
         sessions.findById(sessionId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Visitor session not found"));
         return messages.findBySessionIdAndProfileIdOrderByIdAsc(sessionId, profileId).stream().map(MessageResponse::from).toList();
@@ -316,10 +355,7 @@ public class PortfolioService {
     private void requireMatched(VisitorSession session, String profileId) {
         if (accounts.ownsWorkspaceProfile(session.id, profileId))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot message your own profile.");
-        Profile profile = requireProfile(profileId);
-        Swipe swipe = swipes.findBySessionIdAndProfileId(session.id, profile.id).orElseThrow(() ->
-            new ResponseStatusException(HttpStatus.FORBIDDEN, "Profile is not matched"));
-        if (swipe.action == Swipe.Action.pass) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Profile is not matched");
+        connections.acceptedThread(session.id,profileId);
     }
 
     private boolean checkRateLimit(String sessionId) {
@@ -450,5 +486,5 @@ public class PortfolioService {
     public record ConversationResponse(ProfileResponse profile, MessageResponse lastMessage, long unreadCount) {}
     public record TeamConversationResponse(String sessionId, ProfileResponse profile, MessageResponse lastMessage) {}
     public record ImagePayload(String contentType, byte[] bytes) {}
-    public record SwipeResult(String profileId, Swipe.Action action, boolean matched, boolean isSuper) {}
+    public record SwipeResult(String profileId, Swipe.Action action, boolean matched, boolean isSuper, String status, String direction) {}
 }

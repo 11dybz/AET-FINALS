@@ -15,22 +15,20 @@
       <div class="rz-sidebar-head"><a class="rz-logo" href="index.html" aria-label="Rizzume home">${icon('flame')}rizzume<small>PORTFOLIO</small></a><p>A little spark. Your next big project.</p></div>
       <div class="rz-sidebar-scroll"><nav class="rz-nav">
         <button data-nav="swipe" aria-current="page">${icon('discover')}Discover</button>
-        <button data-nav="directory">${icon('grid')}Explore the team</button>
-        <button data-nav="matches">${icon('heart')}Your matches<span id="sidebarMatchCount" class="rz-pill">0</span></button>
+        <button data-nav="directory">${icon('grid')}Explore all members</button>
+        <button data-nav="matches">${icon('heart')}Connections<span id="sidebarMatchCount" class="rz-pill">0</span></button>
         <button data-nav="messages">${icon('message')}Messages<span id="sidebarMessageCount" class="rz-pill" hidden>0</span></button>
-        <button data-nav="location">${icon('map')}Location</button>
-        <button data-nav="notifications">${icon('bell')}Notifications<span id="sidebarNotificationCount" class="rz-pill" hidden>0</span></button>
       </nav>
       <div class="rz-sidebar-label">Your connections <span>Made for building</span></div>
       <div id="sidebarMatches" class="rz-match-preview"></div>
-      <div id="sidebarEmpty" class="rz-sidebar-empty">Good projects start with a hello.<br>Like a profile to connect.</div></div>
-      <div class="rz-sidebar-footer"><div id="sidebarAccount" class="rz-account-summary"></div><button id="sidebarLogout" type="button" class="rz-account-logout">Log out</button><a href="team-inbox.html">${icon('lock')}Team workspace ${icon('arrow')}</a><p>Find your people. Build something great.<br>Rizzume · Team portfolio</p></div>
+      <div id="sidebarEmpty" class="rz-sidebar-empty">Good projects start with a hello.<br>Send a request to connect.</div></div>
+      <div class="rz-sidebar-footer"><div id="sidebarAccount" class="rz-account-summary"></div><button id="sidebarLogout" type="button" class="rz-account-logout">Log out</button><a href="team-inbox.html">${icon('lock')}Team workspace ${icon('arrow')}</a><p>Find your people. Build something great.<br>Rizzume · Online portfolio showcase</p></div>
     </aside>
     <header class="rz-topbar"><div class="rz-breadcrumb">Your workspace <span>/</span> <strong id="rzBreadcrumb">Discover</strong></div>
       <div class="rz-top-actions"><button id="topLocation" class="rz-location-button">${icon('pin')}<span id="topLocationLabel">Explore locations</span></button><button id="topNotifications" class="rz-icon-button" aria-label="Open notifications">${icon('bell')}<span id="topNotificationBadge" class="rz-badge" hidden></span></button><button id="topQr" class="rz-icon-button" aria-label="Scan QR Code" title="Scan Member QR Code">${qrSvg}</button><button id="topHelp" class="rz-icon-button" aria-label="How Rizzume works">${icon('spark')}</button><button id="accountMenuButton" class="rz-avatar" type="button" aria-label="Your account">You</button></div>
     </header>
     <div class="rz-heading" id="discoveryHeading"><div><div class="rz-eyebrow">Great people. Greater possibilities.</div><h2>Find your next connection<span style="color:#fe3c72">.</span></h2><p>Meet the minds behind the code. See who clicks.</p></div><button id="discoveryFilters" class="rz-outline-button">${icon('settings')}Preferences</button></div>
-    <aside id="discoveryTip" class="rz-tip"><div class="rz-tip-art">${icon('spark')}</div><h3>Great things start<br>with a right swipe.</h3><p>Find a skill that clicks.<br>Save a profile. Say hello.<br>Build something together.</p><hr><div class="rz-status">Open for collaboration</div><small>Profiles are saved to your matches.<br>A saved profile isn’t a mutual match.</small></aside>
+    <aside id="discoveryTip" class="rz-tip"><div class="rz-tip-art">${icon('spark')}</div><h3>Great things start<br>with a right swipe.</h3><p>Find a skill that clicks.<br>Send a request. Say hello.<br>Build something together.</p><hr><div class="rz-status">Open for collaboration</div><small>Profiles are saved to your matches.<br>A saved profile isn’t a mutual match.</small></aside>
     <nav class="rz-mobile-nav" aria-label="Mobile navigation"><button data-nav="swipe" aria-current="page">${icon('discover')}Discover</button><button data-nav="directory">${icon('grid')}Explore</button><button data-nav="matches">${icon('heart')}Matches</button><button data-nav="messages">${icon('message')}Messages</button><button data-nav="location">${icon('map')}Map</button></nav>`;
   document.body.classList.add('rizzume-app');
   while (shell.firstChild) document.body.insertBefore(shell.firstChild, $('homeScreen'));
@@ -160,7 +158,7 @@
   $('sidebarLogout').onclick = askToLogout;
 
   const notices = dialog('notificationCenter', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><div class="rz-eyebrow">Stay in the loop</div><h2>Your notifications</h2><p>Matches, replies, and video call updates.</p></div><button data-close class="rz-icon-button" aria-label="Close notifications">${icon('close')}</button></div>
-    <div class="rz-notice-toolbar"><label for="noticeFilter">Show<select id="noticeFilter"><option value="all">All activity</option><option value="match">Matches</option><option value="message">Messages</option><option value="call">Video calls</option></select></label><button id="readNotices" type="button" class="rz-outline-button">Mark all read</button></div>
+    <div class="rz-notice-toolbar"><label for="noticeFilter">Show<select id="noticeFilter"><option value="all">All activity</option><option value="match">Connections</option><option value="request">Connection requests</option><option value="message">Messages</option><option value="call">Video calls</option></select></label><button id="readNotices" type="button" class="rz-outline-button">Mark all read</button></div>
     <div id="noticeStatus" class="rz-help" role="status"></div><div id="noticeList"></div>
     <div class="rz-dialog-actions"><button id="browserNotices" class="rz-outline-button">${icon('bell')}Enable browser alerts</button><button id="refreshNotices" class="rz-outline-button">Refresh</button></div><p class="rz-help">Browser alerts are optional and work while Rizzume is open. You can disable them here anytime.</p></section>`);
   $('noticeFilter').onchange = event => { filter = event.target.value; renderNotices(); };
@@ -208,7 +206,12 @@
       const profile = PROFILES.find(p => p.id === n.profileId);
       const row = document.createElement('button'); row.className = 'rz-notice' + (n.readAt ? '' : ' unread'); row.type = 'button';
       row.innerHTML = `<span class="rz-notice-icon">${icon(n.kind === 'match' ? 'heart' : n.kind === 'call' ? 'video' : 'message')}</span><span><strong>${escapeHtml(profile?.name || 'Rizzume')}</strong><p>${escapeHtml(n.body)}</p><time datetime="${escapeHtml(n.createdAt)}">${escapeHtml(new Date(n.createdAt).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}))}</time></span>`;
-      row.onclick = () => { notices.close(); n.kind === 'message' ? openChat(n.profileId) : openProfileScreenById(n.profileId); };
+      row.onclick = () => {
+        notices.close();
+        if (n.kind === 'message') openChat(n.profileId);
+        else if (n.kind === 'request' || n.kind === 'match') window.RizzumeConnections?.open(n.kind === 'match' ? 'accepted' : 'incoming');
+        else openProfileScreenById(n.profileId);
+      };
       list.appendChild(row);
     });
   }
@@ -218,7 +221,8 @@
     if (polling) return;
     polling = true;
     try {
-      const result = await request('/me/notifications');
+      const [result] = await Promise.all([request('/me/notifications'),
+        window.RizzumeConnections?.refresh().catch(() => {}),pollIncomingCalls().catch(() => {})]);
       if (!Array.isArray(result.items)) throw new Error('Unexpected notification response.');
       feed = result.items; unread = result.unreadCount;
       feedLoaded = true; feedError = false;
@@ -229,7 +233,7 @@
       }
       latestId = Math.max(latestId || 0, ...feed.map(n => n.id));
       $('noticeStatus').textContent = unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : '';
-      ['topNotificationBadge', 'sidebarNotificationCount'].forEach(id => { $(id).hidden = !unread; $(id).textContent = unread > 99 ? '99+' : unread; });
+      ['topNotificationBadge'].forEach(id => { $(id).hidden = !unread; $(id).textContent = unread > 99 ? '99+' : unread; });
       const unreadMessages = feed.filter(n => n.kind === 'message' && !n.readAt).length;
       $('sidebarMessageCount').hidden = !unreadMessages; $('sidebarMessageCount').textContent = unreadMessages;
       if (!notices.el.hidden) renderNotices();
@@ -303,20 +307,15 @@
   };
   $('shareLocation').onclick = async () => {
     if (!location || !chatOpen || !chatProfileId) return toast('Open a matched conversation before sharing your location.');
-    const profile = chatProfileId; const lat = location.lat.toFixed(3), lon = location.lon.toFixed(3);
-    $('shareLocation').disabled = true;
-    try {
-      await request(`/me/conversations/${encodeURIComponent(profile)}/messages`, 'POST', {body:`My approximate location: https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`});
-      maps.close(); toast('Approximate location shared in this conversation.'); if (chatProfileId === profile) pollChatMessages();
-    } catch (error) { toast(error.message); }
-    finally { $('shareLocation').disabled = false; }
+    const initial = {latitude:location.lat,longitude:location.lon};
+    maps.close(); window.RizzumeLocations.open(initial);
   };
 
   const preferences = dialog('discoveryPreferences', `<section class="rz-dialog-panel"><div class="rz-dialog-header"><div><h2>Your kind of connection</h2><p>Filter by skills, role, name, or city.</p></div><button data-close class="rz-icon-button" aria-label="Close preferences">${icon('close')}</button></div><form id="discoveryForm"><label for="discoverySearch">What are you looking for?<input id="discoverySearch" maxlength="100" placeholder="Try React, backend, or Manila" autocomplete="off"></label><div class="rz-dialog-actions"><button class="rz-primary" type="submit">Apply preferences</button><button class="rz-outline-button" id="clearPreferences" type="button">Reset</button></div></form><p class="rz-help">Preferences filter this discovery deck. Your saved matches stay available.</p></section>`);
   $('discoveryFilters').onclick = () => preferences.open();
   function applyPreferences() {
     const query = $('discoverySearch').value.trim().toLowerCase();
-    cardsState = matchableProfiles().filter(p => [p.name,p.role,p.location,...(p.tags || [])].some(value => String(value || '').toLowerCase().includes(query)));
+    cardsState = matchableProfiles().filter(p => !window.RizzumeConnections || window.RizzumeConnections.discoverable(p.id)).filter(p => [p.name,p.role,p.location,...(p.tags || [])].some(value => String(value || '').toLowerCase().includes(query)));
     renderDeck();
     if (!cardsState.length) $('emptyDeckTitle').textContent = 'No profiles match your preferences.';
     else $('emptyDeckTitle').textContent = 'No profiles match your filter';
@@ -327,11 +326,40 @@
   $('clearPreferences').onclick = () => { $('discoverySearch').value = ''; applyPreferences(); };
 
   const room = new RizzumeVideoRoom({request});
+  const incomingCard=document.createElement('section'); incomingCard.className='rz-incoming-call'; incomingCard.hidden=true;
+  incomingCard.setAttribute('aria-label','Incoming video call'); incomingCard.setAttribute('aria-live','polite');
+  document.body.appendChild(incomingCard);
+  async function pollIncomingCalls() {
+    if (!window.RizzumeAccount?.user?.profileId || room.busy) { incomingCard.hidden=true; return; }
+    const calls=await request('/me/calls');
+    const call=calls.find(c => c.incoming && c.state === 'ringing');
+    if (!call) { incomingCard.hidden=true; incomingCard.dataset.id=''; return; }
+    if (incomingCard.dataset.id === call.id && !incomingCard.hidden) return;
+    incomingCard.dataset.id=call.id;
+    const profile=PROFILES.find(p => p.id === call.profileId), name=profile?.name || 'Your connection';
+    incomingCard.innerHTML=`<strong>${escapeHtml(name)}</strong><p>Incoming call</p><div><button type="button" class="rz-primary" data-answer>Answer with video</button><button type="button" class="rz-outline-button" data-answer-audio>Answer with voice</button><button type="button" class="rz-outline-button" data-decline>Decline</button></div>`;
+    incomingCard.hidden=false;
+    incomingCard.querySelector('[data-answer]').onclick=async () => {
+      incomingCard.hidden=true; await room.accept(call.id,name); pollIncomingCalls().catch(() => {});
+    };
+    incomingCard.querySelector('[data-answer-audio]').onclick=async()=>{
+      incomingCard.hidden=true;await room.accept(call.id,name,{video:false});pollIncomingCalls().catch(()=>{});
+    };
+    incomingCard.querySelector('[data-decline]').onclick=async event => {
+      const button=event.currentTarget; button.disabled=true;
+      try { await request('/me/calls/'+encodeURIComponent(call.id)+'/action','POST',{action:'decline'}); incomingCard.hidden=true; }
+      catch (error) { toast(error.message); button.disabled=false; }
+    };
+  }
   $('chatVideoButton').onclick = () => {
     if (chatProfileId && matchedProfiles.some(p => p.id === chatProfileId)) room.start(chatProfileId, chatProfileName);
     else toast('Open a matched conversation to start a call.');
   };
-  $('chatMapButton').onclick = () => openMap(PROFILES.find(p => p.id === chatProfileId));
+  if($('chatAudioButton'))$('chatAudioButton').onclick=()=>{
+    if(chatProfileId && matchedProfiles.some(p=>p.id===chatProfileId))room.start(chatProfileId,chatProfileName,{video:false});
+    else toast('Open a connected conversation to start a voice call.');
+  };
+  $('chatMapButton').onclick = () => window.RizzumeLocations.open();
   $('chatListButton').onclick = () => showConversationList();
   function refreshSidebar() {
     $('sidebarMatchCount').textContent = matchedProfiles.length;
@@ -353,11 +381,11 @@
   }
   window.RizzumeExperience = {
     refreshAccount,
-    stop() { clearTimeout(pollTimer); room.hangup(); },
+    stop() { clearTimeout(pollTimer); incomingCard.hidden=true; room.hangup(); },
     resume() { if (backendAvailable && !polling) poll(); },
     ready() { if (ready) return; ready = true; refreshSidebar(); syncFloatingProfileButton(); if (backendAvailable) poll(); },
     navigated(value) {
-      mode = value; $('rzBreadcrumb').textContent = ({directory:'Explore the team',home:'Welcome',messages:'Messages'})[value] || 'Discover';
+      mode = value; $('rzBreadcrumb').textContent = ({directory:'Explore all members',home:'Welcome',messages:'Messages'})[value] || 'Discover';
       $('discoveryHeading').hidden = value !== 'swipe'; $('discoveryTip').hidden = value !== 'swipe';
       document.querySelectorAll('[data-nav]').forEach(button => { if (button.dataset.nav === mode) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
       syncFloatingProfileButton();

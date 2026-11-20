@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface AccountRepository extends JpaRepository<Account, String> {
     Optional<Account> findByEmail(String email);
+    Optional<Account> findByProfileId(String profileId);
     boolean existsByWorkspaceId(String workspaceId);
     Optional<Account> findByWorkspaceId(String workspaceId);
     boolean existsByWorkspaceIdAndProfileId(String workspaceId, String profileId);

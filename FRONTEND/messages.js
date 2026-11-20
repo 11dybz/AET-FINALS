@@ -20,6 +20,7 @@ function syncChatComposer() {
   composer.disabled = !chatThreadReady || chatSending;
   chatElement('chatSendButton').disabled = composer.disabled || !composer.value.trim();
   chatElement('chatVideoButton').disabled = !chatThreadReady;
+  if(chatElement('chatAudioButton'))chatElement('chatAudioButton').disabled = !chatThreadReady;
   chatElement('chatMapButton').disabled = !chatThreadReady;
 }
 
@@ -138,7 +139,10 @@ function rememberChatDraft() {
 
 async function openChat(profileId) {
   if (profileId && isOwnProfile(profileId)) return showToast('Your profile','You cannot message yourself.');
-  if (profileId && !matchedProfiles.some(p => p.id === profileId)) return showToast('Match first','Like this profile before sending a message.');
+  if (profileId && !matchedProfiles.some(p => p.id === profileId)) {
+    window.RizzumeConnections?.open('incoming');
+    return showToast('Connect first','Messaging opens after a connection request is accepted.');
+  }
   if (chatOpen && !profileId) { showConversationList(); return; }
   if (!chatOpen) {
     chatLastFocused = document.activeElement;
@@ -154,6 +158,7 @@ async function openChat(profileId) {
 }
 
 function showConversationList() {
+  window.RizzumeLocations?.reset();
   rememberChatDraft(); chatGeneration++; chatProfileId = null; chatThreadReady = false;
   chatElement('chatSheet').dataset.thread = 'false';
   chatElement('threadView').classList.add('hidden'); chatElement('chatPlaceholder').hidden = false;
@@ -163,6 +168,7 @@ function showConversationList() {
 }
 
 function closeChat() {
+  window.RizzumeLocations?.reset();
   rememberChatDraft(); chatGeneration++; chatListRequest++; chatListLoading = false; chatOpen = false; chatProfileId = null; chatThreadReady = false;
   stopChatPolling(); chatElement('chatSheet').classList.add('hidden'); document.body.classList.remove('messages-open');
   ['homeScreen','swipeAppScreen','directoryScreen','fullProfileScreen','discoveryHeading','discoveryTip'].forEach(id => { const view = chatElement(id); if (view) view.inert = false; });
@@ -179,6 +185,7 @@ async function openChatThread(profileId) {
   if (!chatOpen) return;
   if (chatProfileId === profileId && chatThreadReady) { if (!compactChat()) chatElement('chatComposer').focus(); return; }
   rememberChatDraft(); const generation = ++chatGeneration;
+  window.RizzumeLocations?.reset();
   chatProfileId = profileId; chatAfterId = 0; chatFailedPayload = null; chatThreadReady = false;
   const composer = chatElement('chatComposer'); composer.value = chatDrafts.get(profileId) || ''; chatComposerInput();
   chatElement('chatError').classList.add('hidden'); chatElement('threadLoadNotice').hidden = true;
@@ -218,8 +225,9 @@ async function pollChatMessages(initial = false) {
         const day = new Date(message.createdAt).toLocaleDateString();
         if (day !== lastDay) { const separator = document.createElement('div'); separator.className = 'ms-date-separator'; separator.textContent = day; log.appendChild(separator); lastDay = day; log.dataset.lastDay = day; }
         const bubble = document.createElement('div'); bubble.className = 'ms-bubble '+(message.sender === 'visitor' ? 'ms-outgoing' : 'ms-incoming'); bubble.dataset.messageId = String(message.id);
-        const body = document.createElement('p');
-        if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(body,message.body); else body.textContent = message.body;
+        const body = document.createElement(message.location ? 'div' : 'p');
+        if (message.location && window.RizzumeLocations) window.RizzumeLocations.render(body,message,profileId);
+        else if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(body,message.body); else body.textContent = message.body;
         const time = document.createElement('time'); time.textContent = new Date(message.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
         bubble.append(body,time); log.appendChild(bubble); chatAfterId = Math.max(chatAfterId,Number(message.id));
       }
@@ -228,7 +236,8 @@ async function pollChatMessages(initial = false) {
         try { await apiCall(`/me/conversations/${encodeURIComponent(profileId)}/read`,'POST',undefined,{admin:false}); } catch (_) {}
         if (chatOpen && generation === chatGeneration) loadConversations();
       }
-    } else if (chatAfterId === 0) setChatThreadState('A new connection. A fresh conversation.','Say hello to '+chatProfileName+'. Share an idea or ask what they’re working on.');
+    } else if (chatAfterId === 0) setChatThreadState('A new connection. A fresh conversation.','Say hello to '+chatProfileName+". Share an idea or ask what they're working on.");
+    await window.RizzumeLocations?.refresh(profileId,generation);
   } catch (error) {
     if (!chatOpen || generation !== chatGeneration) return;
     if (chatAfterId === 0) { chatThreadReady = false; setChatThreadState('Let’s reconnect','Your conversation could not load. Try again in a moment.',true); }

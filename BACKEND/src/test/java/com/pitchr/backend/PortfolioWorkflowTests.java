@@ -32,6 +32,9 @@ class PortfolioWorkflowTests {
     @Autowired MockMvc mvc;
     @Autowired SessionRepository sessions;
     @Autowired VideoCallRepository calls;
+    @Autowired AccountRepository owners;
+    @Autowired AccountService accountService;
+    @Autowired AccountSessionRepository authSessions;
     private final JsonMapper json = new JsonMapper();
 
     @Test
@@ -92,13 +95,12 @@ class PortfolioWorkflowTests {
         Cookie visitor = session(); Cookie other = session();
         mvc.perform(post("/api/me/conversations/" + id + "/messages").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content("{\"body\":\"Before match\"}")).andExpect(status().isForbidden());
-        mvc.perform(put("/api/me/swipes/" + id).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        connect(visitor, "/api/me/swipes/" + id);
         mvc.perform(post("/api/me/conversations/" + id + "/messages").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content("{\"body\":\"Hello developer\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.sender").value("visitor"));
         mvc.perform(get("/api/me/conversations/" + id + "/messages").cookie(other)).andExpect(status().isForbidden());
         mvc.perform(get("/api/team/conversations")).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/team/conversations/" + visitor.getValue() + "/" + id + "/messages")
+        mvc.perform(post("/api/team/conversations/" + workspace(visitor) + "/" + id + "/messages")
             .header("X-Team-Key", "workflow-team").contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Team reply\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.sender").value("member"));
         mvc.perform(get("/api/me/conversations").cookie(visitor)).andExpect(jsonPath("$[0].unreadCount").value(1));
@@ -120,8 +122,9 @@ class PortfolioWorkflowTests {
         mvc.perform(post("/api/me/conversations/chee-reynaldo/messages").cookie(visitor)
             .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\" \"}")).andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("body")));
-        var stored = sessions.findById(visitor.getValue()).orElseThrow();
-        stored.expiresAt = Instant.now().minusSeconds(1); sessions.saveAndFlush(stored);
+        String accountId=accountService.requireAccount(visitor.getValue()).id;
+        var stored=authSessions.findAll().stream().filter(row -> row.accountId.equals(accountId)).findFirst().orElseThrow();
+        stored.expiresAt=Instant.now().minusSeconds(1);authSessions.saveAndFlush(stored);
         mvc.perform(get("/api/me/matches").cookie(visitor)).andExpect(status().isUnauthorized());
         var renewed = mvc.perform(post("/api/session").cookie(visitor)).andExpect(status().isOk()).andReturn();
         assertThat(renewed.getResponse().getCookie(PortfolioController.COOKIE).getValue()).isNotEqualTo(visitor.getValue());
@@ -137,13 +140,12 @@ class PortfolioWorkflowTests {
         Cookie visitor = session(), other = session();
         mvc.perform(get("/api/me/notifications")).andExpect(status().isUnauthorized());
         String swipe = "/api/me/swipes/chee-reynaldo";
-        for (int i = 0; i < 2; i++) mvc.perform(put(swipe).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        for (int i = 0; i < 2; i++) connect(visitor, swipe);
         var notices = mvc.perform(get("/api/me/notifications").cookie(visitor)).andExpect(status().isOk())
             .andExpect(jsonPath("$.unreadCount").value(1)).andExpect(jsonPath("$.items.length()").value(1)).andReturn();
         long matchId = json.readTree(notices.getResponse().getContentAsString()).get("items").get(0).get("id").asLong();
         mvc.perform(get("/api/me/notifications").cookie(other)).andExpect(jsonPath("$.items.length()").value(0));
-        mvc.perform(post("/api/team/conversations/" + visitor.getValue() + "/chee-reynaldo/messages")
+        mvc.perform(post("/api/team/conversations/" + workspace(visitor) + "/chee-reynaldo/messages")
             .header("X-Team-Key", "workflow-team").contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"New reply\"}"))
             .andExpect(status().isOk());
         // Read only the items already displayed; a reply arriving during the request stays unread.
@@ -159,8 +161,7 @@ class PortfolioWorkflowTests {
         String payload = "{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}";
         mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON).content(payload))
             .andExpect(status().isForbidden());
-        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        connect(visitor, "/api/me/swipes/chee-reynaldo");
         String id = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content(payload)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("ringing"))
             .andReturn().getResponse().getContentAsString()).get("id").asString();
@@ -192,8 +193,7 @@ class PortfolioWorkflowTests {
     @Test
     void abandonedCallsExpireAndInvalidSignalsAreRejected() throws Exception {
         Cookie visitor = session();
-        mvc.perform(put("/api/me/swipes/dapog-john-greg").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        connect(visitor, "/api/me/swipes/dapog-john-greg");
         mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content("{\"profileId\":\"dapog-john-greg\",\"offer\":\"bad\"}")).andExpect(status().isBadRequest());
         var result = mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
@@ -209,16 +209,15 @@ class PortfolioWorkflowTests {
     }
 
     @Test
-    void passingAProfileEndsItsCallAndDoesNotBlockTheNextInvitation() throws Exception {
+    void removingAConnectionEndsItsCallAndDoesNotBlockTheNextInvitation() throws Exception {
         Cookie visitor = session();
         for (String profile : new String[]{"chee-reynaldo", "dapog-john-greg"}) {
-            mvc.perform(put("/api/me/swipes/" + profile).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+            connect(visitor, "/api/me/swipes/" + profile);
         }
         String id = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content("{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}")).andReturn().getResponse().getContentAsString()).get("id").asString();
-        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"pass\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/me/connections/chee-reynaldo/action").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"remove\"}")).andExpect(status().isOk());
         assertThat(calls.findById(id).orElseThrow().state).isEqualTo("ended");
         mvc.perform(get("/api/team/calls/" + id).header("X-Team-Key", "workflow-team")).andExpect(status().isForbidden());
         mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
@@ -231,8 +230,7 @@ class PortfolioWorkflowTests {
             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Call cleanup\",\"age\":25}"))
             .andReturn().getResponse().getContentAsString()).get("id").asString();
         Cookie visitor = session();
-        mvc.perform(put("/api/me/swipes/" + id).cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        connect(visitor, "/api/me/swipes/" + id);
         String callId = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
             .content("{\"profileId\":\"" + id + "\",\"offer\":\"v=0\\r\\n\"}"))
             .andReturn().getResponse().getContentAsString()).get("id").asString();
@@ -246,8 +244,7 @@ class PortfolioWorkflowTests {
     @Test
     void repeatedInvitationsAreRateLimited() throws Exception {
         Cookie visitor = session();
-        mvc.perform(put("/api/me/swipes/chee-reynaldo").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"action\":\"like\"}")).andExpect(status().isOk());
+        connect(visitor, "/api/me/swipes/chee-reynaldo");
         String body = "{\"profileId\":\"chee-reynaldo\",\"offer\":\"v=0\\r\\n\"}";
         for (int i = 0; i < 5; i++) {
             String callId = json.readTree(mvc.perform(post("/api/me/calls").cookie(visitor).contentType(MediaType.APPLICATION_JSON)
@@ -259,10 +256,37 @@ class PortfolioWorkflowTests {
             .andExpect(status().isTooManyRequests());
     }
 
+    private static final String PASSWORD="Workflow password 42!";
+    private String workspace(Cookie cookie) { return accountService.requireAccount(cookie.getValue()).workspaceId; }
+    private Cookie register() throws Exception {
+        String email="workflow-"+java.util.UUID.randomUUID()+"@example.com";
+        return mvc.perform(post("/api/auth/register").with(r->{r.setRemoteAddr(email);return r;}).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(java.util.Map.of("name","Workflow User","email",email,"password",PASSWORD,"confirmPassword",PASSWORD))))
+            .andExpect(status().isCreated()).andReturn().getResponse().getCookie(PortfolioController.COOKIE);
+    }
     private Cookie session() throws Exception {
-        MvcResult result = mvc.perform(post("/api/session")).andExpect(status().isOk()).andReturn();
-        Cookie cookie = result.getResponse().getCookie(PortfolioController.COOKIE);
-        assertThat(cookie).isNotNull();
+        Cookie cookie=register();
+        mvc.perform(post("/api/profiles").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(java.util.Map.of("name","Workflow "+java.util.UUID.randomUUID(),"age",24))))
+            .andExpect(status().isCreated());
         return cookie;
+    }
+    private void connect(Cookie caller,String path) throws Exception {
+        String profile=path.substring("/api/me/swipes/".length());
+        Account recipient=owners.findByProfileId(profile).orElse(null); Cookie receiver;
+        if (recipient == null) {
+            receiver=register(); recipient=accountService.requireAccount(receiver.getValue());
+            recipient.profileId=profile;owners.saveAndFlush(recipient);
+        } else {
+            String email=recipient.email;
+            receiver=mvc.perform(post("/api/auth/login").with(r->{r.setRemoteAddr(email);return r;}).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(java.util.Map.of("email",email,"password",PASSWORD))))
+                .andExpect(status().isOk()).andReturn().getResponse().getCookie(PortfolioController.COOKIE);
+        }
+        mvc.perform(put(path).cookie(caller).contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"like\"}"))
+            .andExpect(status().isOk());
+        String own=accountService.requireAccount(caller.getValue()).profileId;
+        mvc.perform(post("/api/me/connections/"+own+"/action").cookie(receiver).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"action\":\"accept\"}")).andExpect(status().isOk());
     }
 }

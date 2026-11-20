@@ -22,6 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PortfolioApiTests {
     @Value("${local.server.port}") int port;
     @Autowired SessionRepository sessions;
+    @Autowired AccountService accountService;
+    @Autowired AccountRepository owners;
+    @Autowired AccountSessionRepository authSessions;
     @Autowired SwipeRepository swipes;
     @Autowired ProfileRepository profiles;
     @Autowired ProfileImageRepository images;
@@ -77,9 +80,10 @@ class PortfolioApiTests {
         var response = request("GET", "/profiles", null, null);
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode profiles = body(response);
-        assertThat(profiles.size()).isEqualTo(4);
+        assertThat(profiles.size()).isGreaterThanOrEqualTo(4);
         assertThat(profiles.get(0).get("id").asString()).isEqualTo("chee-reynaldo");
         for (JsonNode profile : profiles) {
+            if (!List.of("chee-reynaldo","dapog-john-greg","fontelar-dave","villanueva-justin").contains(profile.get("id").asString())) continue;
             assertThat(profile.get("tags").size()).isGreaterThan(0);
             assertThat(profile.get("dealbreakers").size()).isEqualTo(3);
             assertThat(profile.get("details").get("projects").size()).isEqualTo(2);
@@ -107,6 +111,7 @@ class PortfolioApiTests {
     void likesSurviveNewHttpClientsAndVisitorsAreIsolated() throws Exception {
         String visitor = session();
         assertThat(request("PUT", "/me/swipes/chee-reynaldo", visitor, "{\"action\":\"like\"}").statusCode()).isEqualTo(200);
+        accept(visitor,"chee-reynaldo");
         var reloaded = HttpClient.newHttpClient().send(builder("GET", "/me/matches", visitor, null).build(), HttpResponse.BodyHandlers.ofString());
         assertThat(body(reloaded).size()).isEqualTo(1);
         assertThat(body(reloaded).get(0).get("isSuper").asBoolean()).isFalse();
@@ -116,17 +121,21 @@ class PortfolioApiTests {
     }
 
     @Test
-    void repeatedSwipesUpdateOneRowAndPassRemovesMatch() throws Exception {
+    void repeatedSwipesCreateOneRequestAndRemovalRequiresTheConnectionAction() throws Exception {
         String visitor = session();
-        request("PUT", "/me/swipes/fontelar-dave", visitor, "{\"action\":\"like\"}");
+        request("PUT", "/me/swipes/fontelar-dave", visitor, "{\"action\":\"super_like\"}");
         request("PUT", "/me/swipes/fontelar-dave", visitor, "{\"action\":\"like\"}");
         request("PUT", "/me/swipes/fontelar-dave", visitor, "{\"action\":\"super_like\"}");
+        assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isZero();
+        accept(visitor,"fontelar-dave");
         JsonNode matches = body(request("GET", "/me/matches", visitor, null));
         assertThat(matches.size()).isEqualTo(1);
         assertThat(matches.get(0).get("isSuper").asBoolean()).isTrue();
-        assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(token(visitor))).hasSize(1);
+        assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(workspace(visitor))).hasSize(1);
         var passed = request("PUT", "/me/swipes/fontelar-dave", visitor, "{\"action\":\"pass\"}");
         assertThat(body(passed).get("matched").asBoolean()).isFalse();
+        assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isEqualTo(1);
+        assertThat(request("POST","/me/connections/fontelar-dave/action",visitor,"{\"action\":\"remove\"}").statusCode()).isEqualTo(200);
         assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isZero();
     }
 
@@ -138,7 +147,8 @@ class PortfolioApiTests {
                 "{\"action\":\"like\"}").build(), HttpResponse.BodyHandlers.ofString())).toList();
         CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).join();
         for (var response : requests) assertThat(response.join().statusCode()).isEqualTo(200);
-        assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isEqualTo(1);
+        assertThat(body(request("GET", "/me/matches", visitor, null)).size()).isZero();
+        assertThat(body(request("GET", "/me/connections", visitor, null)).size()).isEqualTo(1);
     }
 
     @Test
@@ -152,9 +162,9 @@ class PortfolioApiTests {
     @Test
     void expiredSessionIsRejectedAndReplaced() throws Exception {
         String visitor = session();
-        VisitorSession stored = sessions.findById(token(visitor)).orElseThrow();
-        stored.expiresAt = Instant.now().minusSeconds(10);
-        sessions.saveAndFlush(stored);
+        String accountId=accountService.requireAccount(token(visitor)).id;
+        AccountSession stored=authSessions.findAll().stream().filter(row -> row.accountId.equals(accountId)).findFirst().orElseThrow();
+        stored.expiresAt=Instant.now().minusSeconds(10);authSessions.saveAndFlush(stored);
         assertThat(request("GET", "/me/matches", visitor, null).statusCode()).isEqualTo(401);
         String renewed = request("POST", "/session", visitor, null).headers().firstValue("Set-Cookie").orElseThrow();
         assertThat(renewed).doesNotStartWith(visitor + ";");
@@ -173,7 +183,7 @@ class PortfolioApiTests {
         assertThat(body(malformed).get("message").asString()).contains("malformed");
         assertThat(request("GET", "/profiles/missing", null, null).statusCode()).isEqualTo(404);
         assertThat(request("PUT", "/me/swipes/missing", visitor, "{\"action\":\"like\"}").statusCode()).isEqualTo(404);
-        assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(token(visitor))).isEmpty();
+        assertThat(swipes.findBySessionIdOrderByCreatedAtAscIdAsc(workspace(visitor))).isEmpty();
     }
 
     @Test
@@ -197,10 +207,32 @@ class PortfolioApiTests {
         assertThat(body(response).get("email").asString()).isEqualTo("team.leads@example.com");
     }
 
+    private static final String PASSWORD="HTTP workflow password 42!";
+    private String workspace(String cookie) {return accountService.requireAccount(token(cookie)).workspaceId;}
+    private String register() throws Exception {
+        String email="http-"+java.util.UUID.randomUUID()+"@example.com";
+        var response=request("POST","/auth/register",null,json.writeValueAsString(java.util.Map.of(
+            "name","HTTP User","email",email,"password",PASSWORD,"confirmPassword",PASSWORD)));
+        assertThat(response.statusCode()).isEqualTo(201);
+        return response.headers().firstValue("Set-Cookie").orElseThrow().split(";",2)[0];
+    }
     private String session() throws Exception {
-        var response = request("POST", "/session", null, null);
-        assertThat(response.statusCode()).isEqualTo(200);
-        return response.headers().firstValue("Set-Cookie").orElseThrow().split(";", 2)[0];
+        String cookie=register();
+        var profile=request("POST","/profiles",cookie,json.writeValueAsString(java.util.Map.of("name","HTTP "+java.util.UUID.randomUUID(),"age",24)));
+        assertThat(profile.statusCode()).isEqualTo(201);
+        return cookie;
+    }
+    private void accept(String caller,String profile) throws Exception {
+        Account recipient=owners.findByProfileId(profile).orElse(null);String receiver;
+        if (recipient == null) {
+            receiver=register();recipient=accountService.requireAccount(token(receiver));recipient.profileId=profile;owners.saveAndFlush(recipient);
+        } else {
+            var result=request("POST","/auth/login",null,json.writeValueAsString(java.util.Map.of("email",recipient.email,"password",PASSWORD)));
+            assertThat(result.statusCode()).isEqualTo(200);
+            receiver=result.headers().firstValue("Set-Cookie").orElseThrow().split(";",2)[0];
+        }
+        String own=accountService.requireAccount(token(caller)).profileId;
+        assertThat(request("POST","/me/connections/"+own+"/action",receiver,"{\"action\":\"accept\"}").statusCode()).isEqualTo(200);
     }
     private String token(String cookie) { return cookie.substring(cookie.indexOf('=') + 1); }
     private JsonNode body(HttpResponse<String> response) { return json.readTree(response.body()); }
