@@ -1,0 +1,29 @@
+#idCardFront, #idCardBack {
+  background-color: #17100f;
+  background-image: linear-gradient(90deg,rgba(12,10,12,.87),rgba(12,10,12,.65) 58%,rgba(12,10,12,.4)),url('images/bastos-pass-background.webp');
+  background-size: cover;
+  background-position: center;
+  min-height: 260px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+#idCardFront .id-owner-row { display: grid; grid-template-columns: 80px minmax(0,1fr) 108px; gap: 14px; }
+#idCardFront .id-owner-row > img { width: 80px; height: 96px; }
+#idCardFront .id-owner-row h3 { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.bastos-demographics { margin: 0; padding: 12px; border: 1px solid #ffffff30; border-radius: 12px; background: #100b0bb3; align-self: center; text-align: left; }
+.bastos-demographics > div + div { margin-top: 12px; }
+.bastos-demographics dt { color: #f9b9cd; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.bastos-demographics dd { margin: 4px 0 0; color: #fff; font-size: 13px; line-height: 1.35; font-weight: 800; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  #idCardFront, #idCardBack { padding: 14px; aspect-ratio: auto; }
+  #idCardFront .id-owner-row { grid-template-columns: 52px minmax(0,1fr) 88px; gap: 8px; }
+  #idCardFront .id-owner-row > img { width: 52px; height: 72px; }
+  #idCardFront .id-owner-row h3 { font-size: 12px; }
+  #idCardFront .id-owner-row p { font-size: 10px; }
+  #idCardFront .id-owner-row .rounded-full { font-size: 7px; padding: 2px 4px; }
+  #idCardFront .id-owner-row .flex-wrap span { font-size: 7px; }
+  .bastos-demographics { padding: 8px; }
+  .bastos-demographics dt { font-size: 8px; }
+  .bastos-demographics dd { font-size: 11px; }
+}

@@ -2,6 +2,18 @@
   const API = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
   const id = document.body.dataset.profileId;
   let available = false, saving = false, relationship = null;
+  const passSexLabels = Object.freeze({
+    'chee-reynaldo': 'bawal pa',
+    'dapog-john-greg': 'pag gabi pa',
+    'fontelar-dave': 'sige sige',
+    'villanueva-justin': 'chocolates nalang'
+  });
+  function passDemographics(profile) {
+    return {
+      age: Number.isInteger(profile.age) && profile.age >= 0 ? String(profile.age) : 'Not specified',
+      sex: passSexLabels[profile.id] || profile.sex || profile.details?.sex || 'Not specified'
+    };
+  }
   const accountReady = window.RizzumeAccount?.checkOptional ? window.RizzumeAccount.checkOptional().catch(() => false) : Promise.resolve(false);
   const isOwnProfile = () => !!id && window.RizzumeAccount?.user?.profileId === id;
   function syncOwnProfileActions() {
@@ -172,6 +184,9 @@
     const idFront = document.getElementById('idCardFront');
     const idBack = document.getElementById('idCardBack');
     if (idFront) {
+      const demographics = passDemographics(profile);
+      set('[data-id-age]', demographics.age, idFront);
+      set('[data-id-sex]', demographics.sex, idFront);
       const idPhoto = idFront.querySelector('img');
       if (idPhoto && resolvedPhoto) idPhoto.src = resolvedPhoto;
       set('h3', profile.name, idFront);
