@@ -834,7 +834,7 @@ async function finalizeSwipe(direction) {
     isSwiping = false;
     hasSwipedOrMoved = false;
     renderDeck();
-  }, 300);
+  }, 180);
 }
 
 async function rewindLastSwipe() {
