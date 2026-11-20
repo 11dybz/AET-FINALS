@@ -222,12 +222,12 @@
     polling = true;
     try {
       const [result] = await Promise.all([request('/me/notifications'),
-        window.RizzumeConnections?.refresh().catch(() => {}),pollIncomingCalls().catch(() => {})]);
+        window.RizzumeConnections?.refresh().catch(() => {})]);
       if (!Array.isArray(result.items)) throw new Error('Unexpected notification response.');
       feed = result.items; unread = result.unreadCount;
       feedLoaded = true; feedError = false;
       if (latestId !== null) for (const n of feed.filter(n => n.id > latestId).reverse()) {
-        if (!n.readAt && document.hidden && notifyBrowser && window.Notification?.permission === 'granted') {
+        if (n.kind !== 'call' && !n.readAt && document.hidden && notifyBrowser && window.Notification?.permission === 'granted') {
           try { const desktop = new Notification('Rizzume · ' + n.kind, {body:n.body, tag:'rizzume-' + n.id}); desktop.onclick = () => { window.focus(); openNotifications(); desktop.close(); }; } catch (_) {}
         }
       }
@@ -327,29 +327,48 @@
 
   const room = new RizzumeVideoRoom({request});
   const incomingCard=document.createElement('section'); incomingCard.className='rz-incoming-call'; incomingCard.hidden=true;
-  incomingCard.setAttribute('aria-label','Incoming video call'); incomingCard.setAttribute('aria-live','polite');
+  incomingCard.setAttribute('aria-label','Incoming call'); incomingCard.setAttribute('aria-live','assertive');
   document.body.appendChild(incomingCard);
+  const callAlert=new window.RizzumeCallAlert({onBlocked:blocked=>{
+    const button=incomingCard.querySelector('[data-enable-ring]'); if (button) button.hidden=!blocked;
+  }});
+  let callPollTimer, callPolling=false, callsEnabled=false, callPollVersion=0;
+  function clearIncomingCall() { incomingCard.hidden=true; incomingCard.dataset.id=''; callAlert.stop(); }
+  function stopCallPolling() { callsEnabled=false;callPollVersion++;clearTimeout(callPollTimer);clearIncomingCall(); }
+  function startCallPolling() { callsEnabled=true;pollIncomingCalls(); }
   async function pollIncomingCalls() {
-    if (!window.RizzumeAccount?.user?.profileId || room.busy) { incomingCard.hidden=true; return; }
+    clearTimeout(callPollTimer);
+    if (!callsEnabled || callPolling) return;
+    callPolling=true; const version=callPollVersion;
+    try {
+    if (!window.RizzumeAccount?.user?.profileId || room.busy) { clearIncomingCall(); return; }
     const calls=await request('/me/calls');
+    if (!callsEnabled || version !== callPollVersion || room.busy) return;
     const call=calls.find(c => c.incoming && c.state === 'ringing');
-    if (!call) { incomingCard.hidden=true; incomingCard.dataset.id=''; return; }
+    if (!call) { clearIncomingCall(); return; }
     if (incomingCard.dataset.id === call.id && !incomingCard.hidden) return;
     incomingCard.dataset.id=call.id;
     const profile=PROFILES.find(p => p.id === call.profileId), name=profile?.name || 'Your connection';
-    incomingCard.innerHTML=`<strong>${escapeHtml(name)}</strong><p>Incoming call</p><div><button type="button" class="rz-primary" data-answer>Answer with video</button><button type="button" class="rz-outline-button" data-answer-audio>Answer with voice</button><button type="button" class="rz-outline-button" data-decline>Decline</button></div>`;
+    incomingCard.innerHTML=`<strong>${escapeHtml(name)}</strong><p>Incoming call</p><button type="button" class="rz-ring-enable" data-enable-ring hidden>Enable ringing sound</button><div><button type="button" class="rz-primary" data-answer>Answer with video</button><button type="button" class="rz-outline-button" data-answer-audio>Answer with voice</button><button type="button" class="rz-outline-button" data-decline>Decline</button></div>`;
     incomingCard.hidden=false;
+    incomingCard.querySelector('[data-enable-ring]').onclick=()=>callAlert.unlock();
+    callAlert.start(call,{name,desktop:notifyBrowser,onOpen:()=>incomingCard.querySelector('[data-answer]')?.focus()});
     incomingCard.querySelector('[data-answer]').onclick=async () => {
-      incomingCard.hidden=true; await room.accept(call.id,name); pollIncomingCalls().catch(() => {});
+      clearIncomingCall(); await room.accept(call.id,name); pollIncomingCalls();
     };
     incomingCard.querySelector('[data-answer-audio]').onclick=async()=>{
-      incomingCard.hidden=true;await room.accept(call.id,name,{video:false});pollIncomingCalls().catch(()=>{});
+      clearIncomingCall();await room.accept(call.id,name,{video:false});pollIncomingCalls();
     };
     incomingCard.querySelector('[data-decline]').onclick=async event => {
-      const button=event.currentTarget; button.disabled=true;
-      try { await request('/me/calls/'+encodeURIComponent(call.id)+'/action','POST',{action:'decline'}); incomingCard.hidden=true; }
-      catch (error) { toast(error.message); button.disabled=false; }
+      const button=event.currentTarget; button.disabled=true;callAlert.stop();
+      try { await request('/me/calls/'+encodeURIComponent(call.id)+'/action','POST',{action:'decline'}); clearIncomingCall(); }
+      catch (error) { toast(error.message); button.disabled=false;callAlert.start(call,{name}); }
     };
+    } catch (_) { /* A transient refresh failure must not dismiss a ringing invitation. */ }
+    finally {
+      callPolling=false;
+      if (callsEnabled) callPollTimer=setTimeout(()=>pollIncomingCalls(),document.hidden?4000:2500);
+    }
   }
   $('chatVideoButton').onclick = () => {
     if (chatProfileId && matchedProfiles.some(p => p.id === chatProfileId)) room.start(chatProfileId, chatProfileName);
@@ -367,7 +386,8 @@
     const list = $('sidebarMatches'); list.replaceChildren();
     matchedProfiles.slice(0,6).forEach(p => {
       const button = document.createElement('button'); button.className = 'rz-mini-match'; button.type = 'button'; button.setAttribute('aria-label', 'Message ' + p.name);
-      button.innerHTML = `<img src="${escapeHtml(safeImageUrl(p.image))}" alt=""><span>${escapeHtml(p.name.split(',')[0])}</span>`;
+      button.innerHTML = `<span class="rz-mini-initials" aria-hidden="true">${escapeHtml(profileInitials(p.name))}</span><img data-profile-photo alt="" hidden><span class="rz-mini-name">${escapeHtml((p.name || 'Member').split(',')[0])}</span>`;
+      setProfilePhoto(button.querySelector('[data-profile-photo]'), safeImageUrl(p.images?.[0]?.url || p.image));
       button.onclick = () => openChatForProfile(p.id); list.appendChild(button);
     });
   }
@@ -381,9 +401,9 @@
   }
   window.RizzumeExperience = {
     refreshAccount,
-    stop() { clearTimeout(pollTimer); incomingCard.hidden=true; room.hangup(); },
-    resume() { if (backendAvailable && !polling) poll(); },
-    ready() { if (ready) return; ready = true; refreshSidebar(); syncFloatingProfileButton(); if (backendAvailable) poll(); },
+    stop() { clearTimeout(pollTimer); stopCallPolling(); room.hangup(); },
+    resume() { if (backendAvailable) {if (!polling) poll();startCallPolling();} },
+    ready() { if (ready) return; ready = true; refreshSidebar(); syncFloatingProfileButton(); if (backendAvailable) {poll();startCallPolling();} },
     navigated(value) {
       mode = value; $('rzBreadcrumb').textContent = ({directory:'Explore all members',home:'Welcome',messages:'Messages'})[value] || 'Discover';
       $('discoveryHeading').hidden = value !== 'swipe'; $('discoveryTip').hidden = value !== 'swipe';
@@ -393,6 +413,6 @@
     refresh: refreshSidebar, openMap
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden && ready && !polling) poll(); });
-  window.addEventListener('pagehide', () => clearTimeout(pollTimer));
+  window.addEventListener('pagehide', () => {clearTimeout(pollTimer);stopCallPolling();});
   updateBrowserButton();
 })();

@@ -224,9 +224,17 @@ async function pollChatMessages(initial = false) {
         if (log.querySelector(`[data-message-id="${Number(message.id)}"]`)) continue;
         const day = new Date(message.createdAt).toLocaleDateString();
         if (day !== lastDay) { const separator = document.createElement('div'); separator.className = 'ms-date-separator'; separator.textContent = day; log.appendChild(separator); lastDay = day; log.dataset.lastDay = day; }
-        const bubble = document.createElement('div'); bubble.className = 'ms-bubble '+(message.sender === 'visitor' ? 'ms-outgoing' : 'ms-incoming'); bubble.dataset.messageId = String(message.id);
+        const bubble = document.createElement('div'); bubble.className = message.call ? 'ms-call-event' : 'ms-bubble '+(message.sender === 'visitor' ? 'ms-outgoing' : 'ms-incoming'); bubble.dataset.messageId = String(message.id);
         const body = document.createElement(message.location ? 'div' : 'p');
-        if (message.location && window.RizzumeLocations) window.RizzumeLocations.render(body,message,profileId);
+        if (message.call) {
+          bubble.classList.toggle('ms-call-missed',message.call.state === 'missed');
+          const duration=Number(message.call.durationSeconds);
+          const label=message.call.state === 'missed' ? 'Missed call' : message.call.state === 'declined' ? 'Call declined' : 'Call ended';
+          body.textContent=(message.sender === 'visitor' ? 'Outgoing call · ' : 'Incoming call · ')+label;
+          if (message.call.state === 'ended' && Number.isFinite(duration) && duration>=0)
+            body.textContent+=' · '+Math.floor(duration/60)+':'+String(Math.floor(duration%60)).padStart(2,'0');
+        }
+        else if (message.location && window.RizzumeLocations) window.RizzumeLocations.render(body,message,profileId);
         else if (window.RizzumeUI?.messageBody) window.RizzumeUI.messageBody(body,message.body); else body.textContent = message.body;
         const time = document.createElement('time'); time.textContent = new Date(message.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
         bubble.append(body,time); log.appendChild(bubble); chatAfterId = Math.max(chatAfterId,Number(message.id));

@@ -176,3 +176,5 @@ body.messages-open #discoveryHeading, body.messages-open #discoveryTip { visibil
 .workspace-loading #directoryGrid::before { content: 'Loading the team…'; font-size: 13px; color: #9995a3; padding: 45px 0; }
 @keyframes workspace-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion:reduce) { .workspace-loading-card > div { animation: none; } }
+.ms-call-event{align-self:center;max-width:90%;margin:12px auto;padding:12px 18px;border:1px solid #e9ebee;border-radius:14px;background:#f7f8fa;text-align:center;color:#626976;font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.ms-call-event p{margin:0;font-weight:700}.ms-call-event time{display:block;font-size:10px;color:#858b96;margin-top:3px}.ms-call-event.ms-call-missed{color:#b92c62;background:#fff0f4;border-color:#f9d4df}

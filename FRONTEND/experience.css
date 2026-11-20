@@ -1,5 +1,9 @@
 :root{--rz-pink:#fe3c72;--rz-coral:#ff6258;--rz-ink:#21262e;--rz-muted:#707782;--rz-line:#e9ebee;--rz-bg:#f7f8fa}
 [hidden]{display:none!important}
+.rz-mini-match .rz-mini-initials{inset:0;display:grid;place-items:center;padding:0 0 16px;background:linear-gradient(135deg,#fff0f4,#f2e8ff);color:#b92c62;font-size:24px;font-weight:800;letter-spacing:1px}
+.rz-mini-match img{position:absolute;inset:0}
+.rz-mini-match .rz-mini-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rz-match-open .member-avatar{width:44px;height:44px;border-radius:11px;font-size:15px}
 .rizzume-app{background:var(--rz-bg)!important;color:var(--rz-ink);padding-left:300px;display:block!important;min-height:100dvh}
 .rz-sidebar{position:fixed;inset:0 auto 0 0;width:300px;background:#fff;border-right:1px solid var(--rz-line);z-index:35;display:flex;flex-direction:column}
 .rz-sidebar-head{background:linear-gradient(110deg,var(--rz-pink),var(--rz-coral));padding:28px 24px 22px;color:#fff}

@@ -1356,7 +1356,7 @@ function updateMatchesUI() {
       row.className = 'rz-match-row';
       row.innerHTML = `
         <button type="button" data-view class="rz-match-open" aria-label="View ${escapeHtml(item.name)}">
-          <img src="${escapeHtml(safeImageUrl(item.image))}" alt="" />
+          <span class="member-avatar" aria-hidden="true"><span>${escapeHtml(profileInitials(item.name))}</span><img data-profile-photo alt="" hidden /></span>
           <span class="rz-match-copy"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.role)}</span>
           ${item.isSuper ? '<span class="rz-match-super">Super liked</span>' : ''}</span>
         </button>
@@ -1365,6 +1365,7 @@ function updateMatchesUI() {
           <button type="button" data-remove class="rz-match-remove" aria-label="Remove ${escapeHtml(item.name)} from matches"><i data-lucide="heart-off" aria-hidden="true"></i>Remove</button>
         </div>
       `;
+      setProfilePhoto(row.querySelector('[data-profile-photo]'), safeImageUrl(item.images?.[0]?.url || item.image));
       row.querySelector('[data-view]').addEventListener('click', () => {
         toggleMatchesDrawer(false); openProfileScreen(item);
       });

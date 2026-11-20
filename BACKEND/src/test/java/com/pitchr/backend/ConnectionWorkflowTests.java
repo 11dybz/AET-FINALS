@@ -27,6 +27,7 @@ class ConnectionWorkflowTests {
     @Autowired MockMvc mvc;
     @Autowired ConnectionRepository connections;
     @Autowired AccountRepository accounts;
+    @Autowired CallHistoryService callHistory;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     final JsonMapper json=new JsonMapper();
     record User(Cookie cookie,String profile,String email) {}
@@ -178,6 +179,71 @@ class ConnectionWorkflowTests {
         mvc.perform(post("/api/auth/logout").cookie(b.cookie)).andExpect(status().isNoContent());
         mvc.perform(get("/api/me/calls/"+id).cookie(a.cookie)).andExpect(jsonPath("$.state").value("ended"));
         mvc.perform(get("/api/me/matches").cookie(a.cookie)).andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test void answeredCallsPersistOneSharedEventWithDurationAndCorrectDirection() throws Exception {
+        User a=user(true),b=user(true);connect(a,b);
+        String id=json.readTree(call(b,a.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        callAction(a,id,"accept").andExpect(status().isOk());
+        jdbc.update("update video_calls set accepted_at = ? where id = ?",java.time.Instant.now().minusSeconds(65),id);
+        callAction(b,id,"end").andExpect(status().isOk());
+        callAction(a,id,"end").andExpect(status().isOk()); callHistory.sweep();
+        mvc.perform(get("/api/me/conversations/"+a.profile+"/messages").cookie(b.cookie))
+            .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].body").value("Call ended"))
+            .andExpect(jsonPath("$[0].sender").value("visitor")).andExpect(jsonPath("$[0].call.state").value("ended"))
+            .andExpect(jsonPath("$[0].call.durationSeconds").value(org.hamcrest.Matchers.greaterThanOrEqualTo(65)));
+        mvc.perform(get("/api/me/conversations/"+b.profile+"/messages").cookie(a.cookie))
+            .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].sender").value("member"));
+        mvc.perform(get("/api/me/conversations").cookie(a.cookie))
+            .andExpect(jsonPath("$[0].lastMessage.body").value("Call ended"));
+    }
+
+    @Test void unansweredInvitationsExpireIntoMissedMessagesWithoutEitherBrowserOpen() throws Exception {
+        User a=user(true),b=user(true);connect(a,b);
+        String id=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        jdbc.update("update video_calls set created_at = ? where id = ?",java.time.Instant.now().minusSeconds(100),id);
+        callHistory.sweep();callHistory.sweep();
+        mvc.perform(get("/api/me/calls/"+id).cookie(a.cookie)).andExpect(jsonPath("$.state").value("missed"));
+        mvc.perform(get("/api/me/calls").cookie(b.cookie)).andExpect(content().json("[]"));
+        mvc.perform(get("/api/me/conversations/"+a.profile+"/messages").cookie(b.cookie))
+            .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].body").value("Missed call"))
+            .andExpect(jsonPath("$[0].call.state").value("missed")).andExpect(jsonPath("$[0].call.durationSeconds").isEmpty());
+        mvc.perform(get("/api/me/conversations").cookie(b.cookie)).andExpect(jsonPath("$[0].unreadCount").value(1));
+        mvc.perform(get("/api/me/notifications").cookie(b.cookie)).andExpect(jsonPath("$.items[0].body").value("Missed call"));
+    }
+
+    @Test void declinedAndCancelledCallsAreRecordedAndUnrelatedPeopleCannotFabricateEvents() throws Exception {
+        User a=user(true),b=user(true),other=user(true);connect(a,b);
+        String id=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        callAction(other,id,"end").andExpect(status().isNotFound());
+        callAction(b,id,"decline").andExpect(status().isOk());
+        String cancelled=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        callAction(a,cancelled,"end").andExpect(status().isOk());
+        mvc.perform(get("/api/me/conversations/"+a.profile+"/messages").cookie(b.cookie))
+            .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].call.state").value("declined"))
+            .andExpect(jsonPath("$[1].call.state").value("missed"));
+        mvc.perform(get("/api/me/conversations/"+a.profile+"/messages").cookie(other.cookie)).andExpect(status().isForbidden());
+    }
+
+    @Test void concurrentHangupsAndDisconnectedCallsProduceOnlyOneEvent() throws Exception {
+        User a=user(true),b=user(true);connect(a,b);
+        String id=json.readTree(call(a,b.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        callAction(b,id,"accept").andExpect(status().isOk());
+        ExecutorService pool=Executors.newFixedThreadPool(2);
+        try {
+            List<Callable<Integer>> work=List.of(() -> callAction(a,id,"end").andReturn().getResponse().getStatus(),
+                () -> callAction(b,id,"end").andReturn().getResponse().getStatus());
+            for (Future<Integer> result : pool.invokeAll(work)) assertThat(result.get()).isEqualTo(200);
+        } finally { pool.shutdownNow(); }
+        String disconnected=json.readTree(call(b,a.profile).andReturn().getResponse().getContentAsString()).get("id").asString();
+        callAction(a,disconnected,"accept").andExpect(status().isOk());
+        jdbc.update("update video_calls set accepted_at = ?, visitor_heartbeat = ? where id = ?",
+            java.time.Instant.now().minusSeconds(120),java.time.Instant.now().minusSeconds(70),disconnected);
+        callHistory.sweep();callHistory.sweep();
+        assertThat(jdbc.queryForObject("select count(*) from messages where call_id = ?",Long.class,id)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from messages where call_id = ?",Long.class,disconnected)).isEqualTo(1);
+        mvc.perform(get("/api/me/conversations/"+b.profile+"/messages").cookie(a.cookie))
+            .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[1].call.state").value("ended"));
     }
 
     private User user(boolean profile) throws Exception {

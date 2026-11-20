@@ -20,15 +20,17 @@ public class CollaborationService {
     private final NotificationRepository notifications;
     private final AccountService accounts;
     private final ConnectionService connections;
+    private final CallHistoryService history;
     private final JsonMapper json = new JsonMapper();
 
     CollaborationService(SessionRepository sessions, SwipeRepository swipes, ProfileRepository profiles,
                          VideoCallRepository calls, CallSignalRepository signals, NotificationRepository notifications, AccountService accounts,
-                         ConnectionService connections) {
+                         ConnectionService connections, CallHistoryService history) {
         this.sessions = sessions; this.swipes = swipes; this.profiles = profiles;
         this.calls = calls; this.signals = signals; this.notifications = notifications;
         this.accounts = accounts;
         this.connections = connections;
+        this.history = history;
     }
 
     void notify(String session, String profile, String kind, String body) {
@@ -52,18 +54,14 @@ public class CollaborationService {
         connections.threadForWrite(token,profileId);
         var visitor = session(token, false); matched(visitor.id, profileId);
         validateSdp(offer);
-        for (VideoCall existing : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(visitor.id, ACTIVE)) {
-            expire(existing);
-            if (ACTIVE.contains(existing.state)) throw failure(HttpStatus.CONFLICT, "You already have an active call");
-        }
+        Set<String> busyIds=new TreeSet<>(calls.activeIds(visitor.id,null));
         for (String participant : List.of(accounts.profileIdForWorkspace(visitor.id),profileId)) {
-            List<VideoCall> busy=new ArrayList<>(calls.findByProfileIdAndStateInOrderByCreatedAtDesc(participant,ACTIVE));
             String workspace=connections.workspaceForProfile(participant);
-            if (workspace != null) busy.addAll(calls.findBySessionIdAndStateInOrderByCreatedAtDesc(workspace,ACTIVE));
-            for (VideoCall existing : busy) {
-                expire(existing);
-                if (ACTIVE.contains(existing.state)) throw failure(HttpStatus.CONFLICT,"One of you already has an active call. Please try again shortly.");
-            }
+            busyIds.addAll(calls.activeIds(workspace,participant));
+        }
+        for (String id : busyIds) {
+            VideoCall existing=calls.lock(id).orElseThrow(); history.refresh(existing);
+            if (ACTIVE.contains(existing.state)) throw failure(HttpStatus.CONFLICT,"One of you already has an active call. Please try again shortly.");
         }
         if (calls.countBySessionIdAndCreatedAtAfter(visitor.id, Instant.now().minusSeconds(60)) >= 5)
             throw failure(HttpStatus.TOO_MANY_REQUESTS, "Too many call invitations. Please wait a minute.");
@@ -79,10 +77,9 @@ public class CollaborationService {
         if (team && !profiles.existsById(profileId)) throw failure(HttpStatus.NOT_FOUND, "Profile not found");
         String workspace=team ? null : session(token,false).id;
         String own=team ? null : accounts.profileIdForWorkspace(workspace);
-        List<VideoCall> items=new ArrayList<>(team ? calls.findByProfileIdAndStateInOrderByCreatedAtDesc(profileId, ACTIVE)
-            : calls.findBySessionIdAndStateInOrderByCreatedAtDesc(workspace, ACTIVE));
-        if (!team && own != null) items.addAll(calls.findByProfileIdAndStateInOrderByCreatedAtDesc(own,ACTIVE));
-        return items.stream().filter(c -> !expired(c))
+        List<VideoCall> items=new ArrayList<>();
+        for (String id : calls.activeIds(workspace,team ? profileId : own)) calls.lock(id).ifPresent(c -> { history.refresh(c); items.add(c); });
+        return items.stream().filter(c -> ACTIVE.contains(c.state))
             .filter(c -> isMatched(c.sessionId,c.profileId)).distinct().limit(100)
             .map(c -> new CallSummary(c.id, !team && c.profileId.equals(own) ? accounts.profileIdForWorkspace(c.sessionId) : c.profileId,
                 c.state, c.createdAt,!team && c.profileId.equals(own))).toList();
@@ -105,11 +102,12 @@ public class CollaborationService {
         if ("accept".equals(action)) {
             if (!team) throw failure(HttpStatus.FORBIDDEN, "Only the invited team member can accept");
             if (!"ringing".equals(c.state)) throw failure(HttpStatus.CONFLICT, "Call already answered");
-            validateSdp(answer); c.answer = answer; c.state = "accepted"; c.teamHeartbeat = Instant.now();
+            validateSdp(answer); c.answer = answer; c.state = "accepted"; c.teamHeartbeat = c.acceptedAt = Instant.now();
         } else if ("end".equals(action) || "decline".equals(action)) {
             if ("decline".equals(action) && (!team || !"ringing".equals(c.state)))
                 throw failure(HttpStatus.CONFLICT, "Only an incoming invitation can be declined");
             c.state = "decline".equals(action) ? "declined" : "ended";
+            c.endedAt=Instant.now(); history.record(c);
         } else throw failure(HttpStatus.BAD_REQUEST, "Unknown call action");
         if (team) notify(c.sessionId, c.profileId, "call", "Video call " + c.state + ".");
         return view(c, team ? "team" : "visitor");
@@ -141,14 +139,7 @@ public class CollaborationService {
         return new CallView(c.id, c.profileId, c.state, c.offer, c.answer, c.createdAt,
             signals.findByCallIdAndSenderNotOrderByIdAsc(c.id, sender).stream().map(s -> new Signal(s.id, s.payload)).toList());
     }
-    private boolean expired(VideoCall c) {
-        Instant now = Instant.now();
-        return ("ringing".equals(c.state) && c.createdAt.isBefore(now.minusSeconds(90)))
-            || ("accepted".equals(c.state) && (c.visitorHeartbeat.isBefore(now.minusSeconds(60))
-                || c.teamHeartbeat.isBefore(now.minusSeconds(60))))
-            || c.createdAt.isBefore(now.minusSeconds(3600));
-    }
-    private void expire(VideoCall c) { if (ACTIVE.contains(c.state) && expired(c)) c.state = "ended"; }
+    private void expire(VideoCall c) { history.refresh(c); }
     private void validateSdp(String sdp) {
         if (sdp == null || sdp.length() > 16000 || !sdp.startsWith("v=0")) throw failure(HttpStatus.BAD_REQUEST, "Invalid session description");
     }

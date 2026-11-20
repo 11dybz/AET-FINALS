@@ -15,4 +15,7 @@ class VideoCall {
     @Column(nullable = false) Instant createdAt;
     @Column(nullable = false) Instant visitorHeartbeat;
     @Column(nullable = false) Instant teamHeartbeat;
+    Instant acceptedAt;
+    Instant endedAt;
+    @Column(nullable = false) boolean historyRecorded;
 }

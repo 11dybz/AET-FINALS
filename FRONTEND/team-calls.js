@@ -3,6 +3,7 @@
   const API = (window.RIZZUME_API_BASE || window.PITCHR_API_BASE || '/api').replace(/\/$/, '');
   let current = null, timer, version = 0;
   const $ = id => document.getElementById(id);
+  const alert=new window.RizzumeCallAlert();
   async function request(path, method = 'GET', body, options = {}, key = current?.key) {
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
     try {
@@ -22,6 +23,7 @@
       if (run !== version) return;
       $('incomingCalls').replaceChildren();
       const incoming = calls.filter(c => c.state === 'ringing');
+      if (incoming.length && !room?.busy) alert.start(incoming[0],{name:'Your connection'}); else alert.stop();
       $('teamCallStatus').textContent = incoming.length ? `${incoming.length} incoming call${incoming.length === 1 ? '' : 's'}.` : 'Listening for calls while this workspace is open.';
       for (const c of incoming) {
         const row = document.createElement('div'); row.className = 'rz-team-incoming';
@@ -29,6 +31,7 @@
         row.querySelector('[data-accept]').onclick = async () => {
           if (run !== version) return;
           if (room?.busy) return toast('Finish your current call before answering another.');
+          alert.stop();
           const button = row.querySelector('[data-accept]'); button.disabled = true;
           room ||= new RizzumeVideoRoom({team:true, request:(path, method, body, options) => request(path, method, body, options, snapshot.key)});
           await room.accept(c.id, 'your visitor');
@@ -36,6 +39,7 @@
         };
         row.querySelector('[data-accept-audio]').onclick = async () => {
           if (run !== version || room?.busy) return;
+          alert.stop();
           row.querySelector('[data-accept-audio]').disabled = true;
           room ||= new RizzumeVideoRoom({team:true, request:(path, method, body, options) => request(path, method, body, options, snapshot.key)});
           await room.accept(c.id, 'your visitor', {video:false});
@@ -43,7 +47,7 @@
         };
         row.querySelector('[data-decline]').onclick = async () => {
           const button = row.querySelector('[data-decline]'); button.disabled = true;
-          try { await request('/team/calls/' + encodeURIComponent(c.id) + '/action', 'POST', {action:'decline'}, {}, snapshot.key); row.remove(); }
+          try { await request('/team/calls/' + encodeURIComponent(c.id) + '/action', 'POST', {action:'decline'}, {}, snapshot.key); alert.stop(); row.remove(); }
           catch (error) { toast(error.message); button.disabled = false; }
         };
         $('incomingCalls').appendChild(row);
@@ -53,7 +57,7 @@
   }
   window.RizzumeTeamCalls = {
     reset() {
-      version++; current = null; clearTimeout(timer); room?.hangup();
+      version++; current = null; clearTimeout(timer); alert.stop(); room?.hangup();
       // Keep one modal; a new request closure is installed for the next selected profile.
       if (room) { room.dispose(); room = null; }
       $('incomingCalls').replaceChildren(); $('teamCallStatus').textContent = '';

@@ -6,6 +6,10 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 interface VideoCallRepository extends JpaRepository<VideoCall, String> {
+    @Query("select c.id from VideoCall c where (c.sessionId = :workspace or c.profileId = :profile) and c.state in ('ringing', 'accepted') order by c.id")
+    List<String> activeIds(String workspace, String profile);
+    @Query("select c.id from VideoCall c where c.historyRecorded = false and (c.state not in ('ringing', 'accepted') or (c.state = 'ringing' and c.createdAt < :ringingBefore) or (c.state = 'accepted' and (c.visitorHeartbeat < :heartbeatBefore or c.teamHeartbeat < :heartbeatBefore)) or c.createdAt < :maximumBefore) order by c.id")
+    List<String> unfinishedIds(java.time.Instant ringingBefore, java.time.Instant heartbeatBefore, java.time.Instant maximumBefore);
     long countBySessionIdAndCreatedAtAfter(String sessionId, java.time.Instant since);
     @Modifying
     @Query("update VideoCall c set c.state = 'ended' where c.sessionId = :session and c.profileId = :profile and c.state in ('ringing', 'accepted')")

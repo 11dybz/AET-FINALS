@@ -118,7 +118,8 @@
       const p=item.profile, row=document.createElement('article'); row.className='rz-connection-row';
       const info=document.createElement('button'); info.type='button'; info.className='rz-match-open';
       info.dataset.focusId=p.id; info.dataset.focusAction='view';
-      info.innerHTML=`<img src="${escapeHtml(safeImageUrl(p.image))}" alt=""><span class="rz-match-copy"><strong>${escapeHtml(p.name)}</strong><span>${escapeHtml(p.role || 'Open to collaborate')}</span></span>`;
+      info.innerHTML=`<span class="member-avatar" aria-hidden="true"><span>${escapeHtml(profileInitials(p.name))}</span><img data-profile-photo alt="" hidden></span><span class="rz-match-copy"><strong>${escapeHtml(p.name)}</strong><span>${escapeHtml(p.role || 'Open to collaborate')}</span></span>`;
+      setProfilePhoto(info.querySelector('[data-profile-photo]'), safeImageUrl(p.images?.[0]?.url || p.image));
       info.onclick=() => { toggleMatchesDrawer(false); openProfileScreen(p); }; row.appendChild(info);
       const meta=document.createElement('p'); meta.className='rz-connection-meta';
       meta.textContent=(item.priority ? 'Priority request · ' : '')+(tab === 'accepted' ? 'Connected' : tab === 'incoming' ? 'Wants to connect with you' : 'Waiting for a reply');

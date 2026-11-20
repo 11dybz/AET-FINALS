@@ -85,6 +85,14 @@ The current group contains Snap's demo lenses, rather than the entire Snapchat L
 
 Run call and effect checks with `node --test FRONTEND/tests/calls.test.cjs FRONTEND/tests/camera-kit.test.cjs FRONTEND/tests/call-filters.test.cjs`.
 
+### Call alerts and chat history
+
+Incoming calls show an Answer/Voice/Decline card and play a repeating ringtone. If the browser blocks sound, choose **Enable ringing sound** on the card. The header bell's **Enable browser alerts** option also enables desktop call notifications. Keep the website open to receive incoming alerts; call checks continue in background tabs, subject to browser throttling. Ringing stops when the invitation ends, expires, is declined or answered, or you leave the workspace.
+
+Both participants see saved call events in their conversation: **Call ended** with the time since answering, **Missed call** for unanswered/expired invitations, and **Call declined**. These entries also appear in inbox previews. Repeated hangups produce one event. Server cleanup handles invitations after 90 seconds and disconnected calls even when both browsers close. This saves call history only; it does not capture audio or video.
+
+Restart Spring Boot after pulling. Flyway **V12** adds the history fields automatically; no database reset or new dependencies are needed. Existing calls are not backfilled. Check with `node --test FRONTEND/tests/call-alerts.test.cjs FRONTEND/tests/calls.test.cjs` and, from `BACKEND`, `.\mvnw.cmd "-Dtest=ConnectionWorkflowTests,LocationSharingTests" test`.
+
 ### Portfolio and collaboration
 
 - Responsive discovery deck, team directory, connection requests, accepted connections, profile galleries and full-screen image viewing.

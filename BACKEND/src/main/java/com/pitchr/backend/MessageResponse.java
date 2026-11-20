@@ -2,12 +2,13 @@ package com.pitchr.backend;
 
 import java.time.Instant;
 
-public record MessageResponse(Long id, String sender, String body, Instant createdAt, Instant readAt, Location location) {
+public record MessageResponse(Long id, String sender, String body, Instant createdAt, Instant readAt, Location location, CallEvent call) {
     static MessageResponse from(Message m) {
         return from(m, Message.Sender.visitor);
     }
     static MessageResponse from(Message m, Message.Sender ownSide) {
-        return new MessageResponse(m.id,m.sender == ownSide ? "visitor" : "member",m.body,m.createdAt,m.readAt, location(m));
+        return new MessageResponse(m.id,m.sender == ownSide ? "visitor" : "member",m.body,m.createdAt,m.readAt, location(m),
+            m.callId == null ? null : new CallEvent(m.callState, m.callDurationSeconds));
     }
     private static Location location(Message m) {
         if (m.locationExpiresAt == null) return null;
@@ -18,4 +19,5 @@ public record MessageResponse(Long id, String sender, String body, Instant creat
             active ? m.locationName : null, m.locationExpiresAt, now);
     }
     public record Location(String state, Double latitude, Double longitude, String name, Instant expiresAt, Instant serverNow) {}
+    public record CallEvent(String state, Long durationSeconds) {}
 }

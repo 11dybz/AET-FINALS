@@ -31,5 +31,7 @@
 .rz-incoming-call strong { display: block; color: #27272a; }
 .rz-incoming-call p { color: #71717a; font-size: 13px; margin: 6px 0 14px; }
 .rz-incoming-call div { display: flex; gap: 8px; }
+.rz-incoming-call .rz-ring-enable { display: block; width: 100%; margin: 0 0 12px; padding: 8px; border: 1px solid #fbcbd8; border-radius: 10px; color: #b92c62; background: #fff1f5; font-size: 12px; }
+.rz-incoming-call > div { flex-wrap: wrap; }
 .rz-incoming-call button { flex: 1; justify-content: center; min-height: 44px; }
 @media (max-width: 440px) { .rz-connection-row { padding: 12px; } .rz-connection-tabs { padding-inline: 12px; gap: 4px; } }

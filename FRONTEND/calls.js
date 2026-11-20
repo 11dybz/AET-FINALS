@@ -183,7 +183,7 @@
       try {
         const call = await this.request(this.path(r)); if (r.cancelled) return;
         if (!['ringing', 'accepted'].includes(call.state)) {
-          this.release(r); this.status(call.state === 'declined' ? 'Call declined. You can send a message instead.' : 'Call ended.'); return;
+          this.release(r); this.status(call.state === 'declined' ? 'Call declined. You can send a message instead.' : call.state === 'missed' ? 'No answer. Missed call saved in your conversation.' : 'Call ended.'); return;
         }
         if (call.answer && !r.pc.remoteDescription) { await r.pc.setRemoteDescription({type: 'answer', sdp: call.answer}); this.status('Connecting…'); }
         if (r.cancelled) return;

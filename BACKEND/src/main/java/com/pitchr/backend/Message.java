@@ -17,6 +17,9 @@ public class Message {
     @Column(nullable = false, length = 1000) String body;
     @Column(nullable = false) Instant createdAt;
     Instant readAt;
+    @Column(unique = true) String callId;
+    @Column(length = 32) String callState;
+    Long callDurationSeconds;
     Double locationLat;
     Double locationLon;
     @Column(length = 100) String locationName;
