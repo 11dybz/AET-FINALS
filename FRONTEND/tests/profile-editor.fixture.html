@@ -5,7 +5,7 @@
 <body><h1>Profile editor test fixture</h1><p>Isolated sample data. Requests never reach the application API.</p>
 <button id="openExisting">Edit sample profile</button><button id="openNew">Create sample profile</button><button id="failNext">Fail next save</button><pre id="fixtureResult"></pre>
 <script>
-let stored = {id:'fixture-profile',name:'Alex Rivera',age:25,persona:'The creative builder',role:'Frontend Developer',location:'Manila, Philippines',matchPercentage:'Open to collaborate',bio:'Turning ideas into thoughtful digital experiences. Always up for building something great.',verified:true,tags:['JavaScript','UI design','React'],dealbreakers:['Curious by default','Teamwork comes first'],details:{fullBio:'I build accessible products with care and curiosity.',projects:[{title:'Campus Connect',desc:'A community app connecting students and their ideas.'}],github:'https://github.com/example',linkedin:'',email:'alex@example.com'},image:'/images/chee.jpg',images:[{id:1,url:'/images/chee.jpg'},{id:2,url:'/images/greg.jpg'}]};
+let stored = {id:'fixture-profile',name:'Alex Rivera',age:25,persona:'The creative builder',role:'Frontend Developer',location:'Manila, Philippines',matchPercentage:'Open to collaborate',bio:'Turning ideas into thoughtful digital experiences. Always up for building something great.',verified:true,tags:['JavaScript','UI design','React'],dealbreakers:['Curious by default','Teamwork comes first'],details:{fullBio:'I build accessible products with care and curiosity.',projects:[{title:'Campus Connect',desc:'A community app connecting students and their ideas.'}],github:'https://github.com/example',linkedin:'',email:'alex@example.com'},image:'/images/chee.png?v=89461c76309a',images:[{id:1,url:'/images/chee.png?v=89461c76309a'},{id:2,url:'/images/greg.png?v=6f706205149d'}]};
 let PROFILES = [structuredClone(stored)], cardsState = [...PROFILES], matchedProfiles = [], currentlyViewingProfile = null, chatProfileId = null;
 let backendAvailable = true, editorDirty = false, editorImages = [], editorOriginalProfile = null, failNext = false;
 const calls = [];
@@ -21,7 +21,7 @@ async function apiCall(path,method='GET',body){
   if (method==='GET') return structuredClone(stored);
   if (path.endsWith('/images/order')) {stored.images = body.imageIds.map(id=>stored.images.find(p=>p.id===id));stored.image=stored.images[0]?.url || '';return null;}
   if (method==='DELETE') {stored.images=stored.images.filter(p=>!path.endsWith('/'+p.id));stored.image=stored.images[0]?.url || '';return null;}
-  if (path.endsWith('/images')) {stored.images.push({id:Date.now(),url:body.url || '/images/dave.jpg'});stored.image=stored.images[0].url;return stored.images;}
+  if (path.endsWith('/images')) {stored.images.push({id:Date.now(),url:body.url || '/images/dave.png?v=391f87f9e3a5'});stored.image=stored.images[0].url;return stored.images;}
   stored=method==='POST' ? {...body,id:'fixture-created',image:'',images:[]} : {...stored,...body};return structuredClone(stored);
 }
 </script><script src="/editor.js"></script><script>

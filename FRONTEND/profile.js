@@ -42,6 +42,7 @@
 
   function imageUrl(value) {
     if (!value) return '';
+    value = window.RizzumeHTTP?.profileImage?.(value) || value;
     try {
       if (value.startsWith('/api/images/')) value = API + value.slice(4);
       else if (value.startsWith('/images/')) value = new URL(value, new URL(API, location.href)).href;

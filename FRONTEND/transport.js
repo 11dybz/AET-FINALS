@@ -1,5 +1,12 @@
 /* Shared request headers for the same-origin app and optional ngrok endpoints. */
 (() => {
+  // Older databases still reference the original JPG filenames for bundled team photos.
+  const bundledPhotos = Object.freeze({"chee":"images/chee.png?v=89461c76309a","greg":"images/greg.png?v=6f706205149d","dave":"images/dave.png?v=391f87f9e3a5","justin":"images/justin.png?v=89bf897eea4c"});
+  function profileImage(value) {
+    if (typeof value !== 'string') return value;
+    const match = /^(\/?)images\/(chee|greg|dave|justin)\.(?:jpe?g|png)(?:[?#].*)?$/i.exec(value);
+    return match ? match[1] + bundledPhotos[match[2].toLowerCase()] : value;
+  }
   function headers(url, original = {}) {
     const result = {Accept:'application/json', ...original};
     try {
@@ -27,5 +34,5 @@
     }
     return data;
   }
-  window.RizzumeHTTP = {headers,accountJson};
+  window.RizzumeHTTP = {headers,accountJson,profileImage};
 })();

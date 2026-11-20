@@ -8,6 +8,23 @@ function setup(href='http://localhost:8081/login.html') {
   vm.runInContext(transport,context);return {context,http:context.window.RizzumeHTTP};
 }
 const response=(body,status=200)=>({ok:status>=200&&status<300,status,text:async()=>typeof body==='string'?body:JSON.stringify(body)});
+
+test('bundled member photos resolve old gallery JPGs and current PNGs to the updated assets',()=>{
+  const {http}=setup();
+  for(const name of ['chee','greg','dave','justin']){
+    const current=http.profileImage('/images/'+name+'.png');
+    assert.match(current,new RegExp('^/images/'+name+'\\.png\\?v=[a-f0-9]{12}$'));
+    assert.equal(http.profileImage('/images/'+name+'.jpg'),current);
+    assert.equal(http.profileImage('/images/'+name+'.jpg?v=old'),current);
+    assert.equal(http.profileImage('images/'+name+'.jpg'),current.slice(1));
+  }
+});
+
+test('member photo compatibility leaves uploaded photos and external URLs unchanged',()=>{
+  const {http}=setup();
+  for(const value of ['/api/images/123','https://example.com/images/chee.jpg','/images/another-member.jpg','',null])
+    assert.equal(http.profileImage(value),value);
+});
 test('ngrok page API requests get the warning header and JSON negotiation',()=>{
   for(const host of ['demo.ngrok-free.dev','demo.ngrok-free.app','demo.ngrok.io','demo.ngrok.app']) {
     const {http}=setup('https://'+host+'/login.html');

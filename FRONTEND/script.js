@@ -17,6 +17,7 @@ function escapeHtml(value) {
 
 function safeImageUrl(value) {
   if (!value || typeof value !== 'string') return '';
+  value = window.RizzumeHTTP?.profileImage?.(value) || value;
   try {
     const base = window.location?.href || 'http://localhost/';
     const url = new URL(value, base);
@@ -189,7 +190,7 @@ const FALLBACK_PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Full Stack Developer",
-    image: "images/chee.jpg",
+    image: "images/chee.png?v=89461c76309a",
     verified: true,
     matchPercentage: "99% Match",
     bio: "Specializes in end-to-end architectures, robust Spring Boot services, and high-performance reactive interfaces.",
@@ -218,7 +219,7 @@ const FALLBACK_PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Backend Engineer",
-    image: "images/greg.jpg",
+    image: "images/greg.png?v=6f706205149d",
     verified: true,
     matchPercentage: "97% Match",
     bio: "Obsessed with low-latency queries, transaction rollback strategies, and secure relational schema design.",
@@ -247,7 +248,7 @@ const FALLBACK_PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Full-Stack & Systems Developer",
-    image: "images/dave.jpg",
+    image: "images/dave.png?v=391f87f9e3a5",
     verified: true,
     matchPercentage: "98% Match",
     bio: "Builds intelligent full-stack applications with React & FastAPI, data engineering pipelines, and retro terminal web tools.",
@@ -276,7 +277,7 @@ const FALLBACK_PROFILES = [
     age: 22,
     location: "Manila, Philippines",
     role: "Frontend & UI/UX Developer",
-    image: "images/justin.jpg",
+    image: "images/justin.png?v=89bf897eea4c",
     verified: true,
     matchPercentage: "96% Match",
     bio: "Translates complex workflows into fluid swipe decks, intuitive layouts, and mobile-responsive animations.",
