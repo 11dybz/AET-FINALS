@@ -113,6 +113,43 @@ class PortfolioWorkflowTests {
     }
 
     @Test
+    void eightPhotosShareOneCoverAndBothUploadRoutesRejectANinth() throws Exception {
+        String id = json.readTree(mvc.perform(post("/api/profiles").header("X-Admin-Key", "workflow-admin")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Eight Photo Gallery\",\"age\":25}"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asString();
+        String path = "/api/profiles/" + id;
+        byte[] gif = java.util.Base64.getDecoder().decode("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==");
+        var oversized = multipart(path + "/images");
+        for (int i = 0; i < 9; i++) oversized.file(new MockMultipartFile("files", "pixel.gif", "image/gif", gif));
+        mvc.perform(oversized.header("X-Admin-Key", "workflow-admin")).andExpect(status().isBadRequest());
+        mvc.perform(get(path)).andExpect(jsonPath("$.images.length()").value(0));
+
+        var batch = multipart(path + "/images");
+        for (int i = 0; i < 7; i++) batch.file(new MockMultipartFile("files", "pixel.gif", "image/gif", gif));
+        var uploaded = json.readTree(mvc.perform(batch.header("X-Admin-Key", "workflow-admin"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        mvc.perform(post(path + "/images").header("X-Admin-Key", "workflow-admin").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"url\":\"https://example.com/eighth.jpg\"}")).andExpect(status().isCreated());
+        String cover = uploaded.get(0).get("url").asString();
+        mvc.perform(get(path)).andExpect(jsonPath("$.images.length()").value(8)).andExpect(jsonPath("$.image").value(cover));
+
+        mvc.perform(post(path + "/images").header("X-Admin-Key", "workflow-admin").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"url\":\"https://example.com/ninth.jpg\"}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("at most 8")));
+        mvc.perform(multipart(path + "/images").file(new MockMultipartFile("files", "pixel.gif", "image/gif", gif))
+            .header("X-Admin-Key", "workflow-admin")).andExpect(status().isBadRequest());
+        mvc.perform(get(path)).andExpect(jsonPath("$.images.length()").value(8)).andExpect(jsonPath("$.image").value(cover));
+
+        // Removing a gallery photo frees a slot without changing the profile picture.
+        mvc.perform(delete(path + "/images/" + uploaded.get(1).get("id").asLong()).header("X-Admin-Key", "workflow-admin"))
+            .andExpect(status().isNoContent());
+        mvc.perform(post(path + "/images").header("X-Admin-Key", "workflow-admin").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"url\":\"https://example.com/replacement.jpg\"}")).andExpect(status().isCreated());
+        mvc.perform(get(path)).andExpect(jsonPath("$.images.length()").value(8)).andExpect(jsonPath("$.image").value(cover));
+        mvc.perform(delete(path).header("X-Admin-Key", "workflow-admin")).andExpect(status().isNoContent());
+    }
+
+    @Test
     void sessionsExpireAndCorsOnlyAllowsConfiguredOrigins() throws Exception {
         mvc.perform(get("/api/me/matches")).andExpect(status().isUnauthorized());
         Cookie visitor = session();

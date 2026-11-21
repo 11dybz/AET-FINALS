@@ -42,6 +42,7 @@ function app(options = {}) {
     lucide: { createIcons() {} },
     console: { log() {}, error() {} },
     AbortController,
+    Image: function () {},
     FormData,
     URL,
     URLSearchParams,
@@ -245,6 +246,33 @@ test('gallery navigation clamps indexes and updates the image counter', () => {
   vm.runInContext('setGalleryIndex(-5)', state.context);
   assert.equal(scrollLeft, 0, 'negative navigation is clamped to the first slide');
   assert.equal(counter.textContent, '1/3');
+});
+
+test('discovery shows one profile picture while the opened gallery contains all eight photos', () => {
+  const state = app();
+  const profile = {...sampleProfile, images: Array.from({length:8}, (_,i) => ({id:i+1,url:`/api/images/${i+1}`}))};
+  vm.runInContext(`PROFILES=[${JSON.stringify(profile)}]; cardsState=[...PROFILES]; renderDeck();`, state.context);
+  const card = state.elements.get('cardsWrapper').children[0];
+  assert.match(card.innerHTML, /src="\/api\/images\/1"/);
+  assert.doesNotMatch(card.innerHTML, /src="\/api\/images\/[2-8]"/);
+  vm.runInContext('renderProfileGallery(PROFILES[0])', state.context);
+  assert.deepEqual(JSON.parse(state.elements.get('detailGallery').dataset.images), profile.images.map(photo => photo.url));
+  assert.equal(state.elements.get('detailCover').hidden, true);
+});
+
+test('main profile cards open all photos before navigating to their full portfolio', () => {
+  for (const [id, page] of [['chee-reynaldo', 'CHEE.html'], ['dapog-john', 'DAPOG.html'], ['fontelar-dave', 'FONTELAR.html'], ['villanueva-justin', 'VILLANUEVA.html']]) {
+    const state = app();
+    state.context.window.RizzumeAccount = {user: {profileId: 'another-member'}};
+    const profile = {...sampleProfile, id, page, images: Array.from({length:8}, (_,i) => ({id:i+1,url:`/api/images/${i+1}`}))};
+    vm.runInContext(`openProfileScreen(${JSON.stringify(profile)})`, state.context);
+    assert.equal(state.context.window.location.href, 'http://localhost/');
+    assert.deepEqual(JSON.parse(state.elements.get('detailGallery').dataset.images), profile.images.map(photo => photo.url));
+    const link = state.elements.get('detailManagementActions').children[0];
+    assert.equal(link.textContent, 'View full portfolio');
+    assert.equal(link.href, `http://localhost/${page}`);
+    assert.equal(state.elements.get('fullProfileScreen').scrollTop, 0);
+  }
 });
 
 test('rapid swipe input cannot start a second swipe while a request is pending', async () => {

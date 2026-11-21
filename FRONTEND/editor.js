@@ -53,7 +53,7 @@ function openProfileEditor(profile = null) {
     <section data-section="card"><div class="pe-section-heading"><span class="pe-step">01 / THE FIRST IMPRESSION</span><h3>Edit your card</h3><p>The essentials people see as they discover you.</p></div><div class="pe-fields" id="editorCardFields"></div><label class="pe-check"><input name="verified" type="checkbox"> Show verified badge</label></section>
     <section data-section="about" hidden><div class="pe-section-heading"><span class="pe-step">02 / A LITTLE MORE YOU</span><h3>Beyond the card</h3><p>Share your story, strengths, and what you bring to a team.</p></div><div class="pe-fields" id="editorAboutFields"></div></section>
     <section data-section="projects" hidden><div class="pe-section-heading"><span class="pe-step">03 / SHOW YOUR WORK</span><h3>Projects with personality</h3><p>Add up to 10 projects. Tell people what you built and why it matters.</p></div><div id="editorProjects" class="pe-projects"></div><button type="button" id="editorAddProject" class="pe-secondary">+ Add project</button></section>
-    <section data-section="photos" hidden><div class="pe-section-heading"><span class="pe-step">04 / PUT A FACE TO THE NAME</span><h3>Your photo lineup</h3><p>Your first photo is your card cover. Add up to 8 photos, 5 MB each.</p></div><p id="editorPhotoHint" class="pe-note"></p><div id="editorGallery" class="pe-gallery"></div><div class="pe-upload"><label for="editorFiles">Choose photos<span>JPG, PNG, GIF or WebP</span></label><input id="editorFiles" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple><label class="pe-label" for="editorImageUrl">Or add an image link</label><input id="editorImageUrl" type="url" placeholder="https://example.com/photo.jpg"><button id="editorUpload" type="button" class="pe-secondary">Add photos</button></div></section>
+    <section data-section="photos" hidden><div class="pe-section-heading"><span class="pe-step">04 / PUT A FACE TO THE NAME</span><h3>Your photo lineup</h3><p>Choose one profile picture for your card. Add up to 7 more photos for people to browse when they open it. Maximum 8 photos total, 5 MB each.</p></div><p id="editorPhotoCount" class="pe-note" role="status" aria-live="polite"></p><p id="editorPhotoHint" class="pe-note"></p><div id="editorGallery" class="pe-gallery"></div><div class="pe-upload"><label for="editorFiles">Choose photos<span>JPG, PNG, GIF or WebP</span></label><input id="editorFiles" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple><label class="pe-label" for="editorImageUrl">Or add an image link</label><input id="editorImageUrl" type="url" placeholder="https://example.com/photo.jpg"><button id="editorUpload" type="button" class="pe-secondary">Add photos</button></div></section>
     <section data-section="links" hidden><div class="pe-section-heading"><span class="pe-step">05 / KEEP THE CONVERSATION GOING</span><h3>Links & contact</h3><p>These details appear on your public profile. Your sign-in email stays separate.</p></div><div class="pe-fields" id="editorLinkFields"></div><div class="pe-account-note"><span>Signed in as</span><strong id="editorAccountEmail"></strong></div></section>
     </fieldset><p id="editorError" class="pe-error" role="alert" tabindex="-1"></p></div>
     <aside class="pe-preview"><div class="pe-preview-heading"><span class="pe-eyebrow">THE DISCOVERY VIEW</span><h3>Your card, reimagined.</h3><p>Live preview as you edit.</p></div><article class="pe-card"><img id="editorPreviewPhoto" alt="Profile card cover"><div class="pe-card-shade"></div><div class="pe-photo-bars" id="editorPreviewBars"></div><span class="pe-card-label" id="editorPreviewPersona"></span><div class="pe-card-copy"><span class="pe-card-match" id="editorPreviewMatch"></span><h4><span id="editorPreviewName"></span><span id="editorPreviewAge"></span><span id="editorPreviewVerified" aria-label="Verified">&#10003;</span></h4><p id="editorPreviewRole"></p><p id="editorPreviewLocation" class="pe-card-location"></p><p id="editorPreviewBio" class="pe-card-bio"></p><div id="editorPreviewTags" class="pe-card-tags"></div></div></article><div class="pe-preview-caption"><span aria-hidden="true">&#10022;</span> A little personality goes a long way.</div><div class="pe-completeness"><div><strong>Profile essentials</strong><span id="editorProgressText"></span></div><progress id="editorProgress" max="6" value="0" aria-label="Completed profile essentials"></progress><p id="editorProgressHint"></p></div></aside></div>
@@ -122,7 +122,7 @@ function openProfileEditor(profile = null) {
     if (photo.getAttribute('src') !== image) { if (image) photo.src = image; else photo.removeAttribute('src'); }
     photo.hidden = !image; photo.onerror = () => { photo.hidden = true; };
     $('#editorPreviewBars').replaceChildren();
-    Array.from({length:Math.max(1,editorImages.length)},(_,i) => { const bar = document.createElement('span'); bar.className = i === 0 ? 'active' : ''; $('#editorPreviewBars').appendChild(bar); });
+    const bar = document.createElement('span'); bar.className = 'active'; $('#editorPreviewBars').appendChild(bar);
     const essentials = [[draft.name && draft.age,'name and age'],[draft.role,'role'],[draft.bio,'short introduction'],[draft.tags.length,'skills'],[draft.details.projects.length,'project'],[image,'cover photo']];
     const complete = essentials.filter(([value]) => value).length; $('#editorProgress').value = complete; $('#editorProgressText').textContent = complete+' / 6';
     $('#editorProgressHint').textContent = complete === 6 ? 'Looking good. Your essentials are all here.' : 'Next up: add your '+essentials.find(([value]) => !value)[1]+'.';
@@ -131,9 +131,12 @@ function openProfileEditor(profile = null) {
       hint.textContent = name === 'tags' ? draft.tags.length+' / 15 skills · one per line, up to 50 characters each' : name === 'dealbreakers' ? draft.dealbreakers.length+' / 10 highlights · one per line, up to 300 characters each' : input.value.length+' / '+input.maxLength;
     });
     $('#editorAddProject').disabled = $('#editorProjects').children.length >= 10;
-    $('#editorView').hidden = !profile; $('#editorUpload').disabled = !profile;
+    const galleryFull = editorImages.length >= 8;
+    $('#editorView').hidden = !profile; $('#editorUpload').disabled = !profile || galleryFull;
+    $('#editorFiles').disabled = !profile || galleryFull; $('#editorImageUrl').disabled = !profile || galleryFull;
+    $('#editorPhotoCount').textContent = editorImages.length+' / 8 photos'+(galleryFull ? ' - Remove a photo to add another.' : '');
     $('#editorResume').disabled = busy || !profile;
-    $('#editorPhotoHint').textContent = profile ? 'Photo changes save immediately. Other profile details save with Save changes.' : 'Save your profile first, then add your photos here.';
+    $('#editorPhotoHint').textContent = profile ? 'The first photo is your profile picture. The other photos appear when someone opens your card. Photo changes save immediately.' : 'Save your profile first, then add your photos here.';
   }
   form.addEventListener('input',updateDraft); form.addEventListener('change',updateDraft);
   function beforeUnload(event) { if (editorDirty || pendingPhotos() || busy) { event.preventDefault(); event.returnValue = ''; } }
@@ -192,9 +195,9 @@ function openProfileEditor(profile = null) {
     editorImages.forEach((image,index) => {
       const tile = document.createElement('div'); tile.className = 'pe-photo';
       const img = document.createElement('img'); img.src = safeImageUrl(image.url); img.alt = 'Profile photo '+(index+1); img.loading = 'lazy'; tile.appendChild(img);
-      const badge = document.createElement('span'); badge.className = 'pe-photo-number'; badge.textContent = index === 0 ? 'Cover' : String(index+1); tile.appendChild(badge);
+      const badge = document.createElement('span'); badge.className = 'pe-photo-number'; badge.textContent = index === 0 ? 'Profile picture' : String(index+1); tile.appendChild(badge);
       const actions = document.createElement('div'); actions.className = 'pe-photo-actions';
-      [['Make cover','cover'],['←','left'],['→','right'],['Remove','remove']].forEach(([label,action]) => {
+      [['Set as profile picture','cover'],['←','left'],['→','right'],['Remove','remove']].forEach(([label,action]) => {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
         button.setAttribute('aria-label',(action === 'left' ? 'Move photo left' : action === 'right' ? 'Move photo right' : label)+', photo '+(index+1));
         button.disabled = (action === 'cover' || action === 'left') && index === 0 || action === 'right' && index === editorImages.length-1;
@@ -215,7 +218,7 @@ function openProfileEditor(profile = null) {
   $('#editorUpload').onclick = () => editorAction(async () => {
     const files = $('#editorFiles'), url = $('#editorImageUrl'), selected = Array.from(files.files);
     if (!selected.length && !url.value.trim()) throw new Error('Choose photos or enter an image link.');
-    if (editorImages.length+selected.length+(url.value.trim() ? 1 : 0) > 8) throw new Error('A profile can have at most 8 photos.');
+    if (editorImages.length+selected.length+(url.value.trim() ? 1 : 0) > 8) throw new Error('A profile can have at most 8 photos, including your profile picture.');
     if (url.value.trim() && (!url.checkValidity() || !/^https?:\/\//i.test(url.value.trim()))) throw new Error('Use a valid http(s) image link.');
     for (const file of selected) {
       if (file.size > 5*1024*1024) throw new Error('Each photo must be 5 MB or smaller.');
@@ -224,7 +227,7 @@ function openProfileEditor(profile = null) {
     const base = '/profiles/'+encodeURIComponent(profile.id)+'/images';
     if (selected.length) { const data = new FormData(); selected.forEach(file => data.append('files',file)); await adminCall(base,'POST',data); files.value = ''; await reloadGallery(); }
     if (url.value.trim()) { await adminCall(base,'POST',{url:url.value.trim()}); url.value = ''; await reloadGallery(); }
-    showToast('Photos saved','Your first photo is your card cover.');
+    showToast('Photos saved','Your profile picture appears on your card. Open the card to browse the other photos.');
   });
   $('#editorSave').textContent = profile ? 'Save changes' : 'Create profile';
   document.body.appendChild(dialog); selectSection('card'); renderGallery(); updateDraft(); dialog.showModal();

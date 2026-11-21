@@ -483,17 +483,17 @@ function renderDirectory() {
     const card = document.createElement('div');
     card.className = "bg-white rounded-3xl p-5 border border-pink-100 shadow-soft flex flex-col justify-between hover:shadow-lg hover:-translate-y-0.5 transition-all";
     card.innerHTML = `
-      <div>
+      <div class="${guest ? 'roster-preview-locked' : ''}">
         <div class="flex items-center gap-3.5 mb-4">
-          <div class="member-avatar ${guest ? 'blur-[2px]' : ''}"><span aria-hidden="true">${escapeHtml(profileInitials(profile.name))}</span><img data-profile-photo alt="${escapeHtml(profile.name)}" hidden /></div>
+          <div class="member-avatar"><span aria-hidden="true">${escapeHtml(profileInitials(profile.name))}</span><img data-profile-photo alt="${escapeHtml(profile.name)}" hidden /></div>
           <div>
             <span class="text-[9px] uppercase font-black text-tinder-orange bg-orange-50 px-2 py-0.5 rounded-full inline-block mb-0.5">${escapeHtml(profile.persona)}</span>
-            <h3 class="font-black text-sm text-zinc-900 ${guest ? 'blur-[4px] select-none' : ''}">${escapeHtml(profile.name)}</h3>
-            <p class="text-xs text-tinder-pink font-semibold ${guest ? 'blur-[4px] select-none' : ''}">${escapeHtml(profile.role)}</p>
+            <h3 class="font-black text-sm text-zinc-900">${escapeHtml(profile.name)}</h3>
+            <p class="text-xs text-tinder-pink font-semibold">${escapeHtml(profile.role)}</p>
           </div>
         </div>
-        <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed ${guest ? 'blur-[5px] select-none' : ''}">${escapeHtml(profile.bio)}</p>
-        <div class="flex flex-wrap gap-1 mb-4 ${guest ? 'blur-[4px] select-none' : ''}">
+        <p class="text-xs text-zinc-600 line-clamp-2 mb-3 leading-relaxed">${escapeHtml(profile.bio)}</p>
+        <div class="flex flex-wrap gap-1 mb-4">
           ${(profile.tags || []).slice(0, 3).map(tag => `<span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold">${escapeHtml(tag)}</span>`).join('')}
         </div>
       </div>
@@ -581,7 +581,7 @@ function renderDeck() {
     const translateY = i * 10;
     const zIndex = 30 - i;
     const card = document.createElement('div');
-    card.className = `swipe-card absolute inset-0 w-full h-full rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden flex flex-col justify-between select-none ${isTopCard ? 'cursor-grab active:cursor-grabbing card-transition' : ''}`;
+    card.className = `swipe-card ${guest ? 'swipe-preview-locked' : ''} absolute inset-0 w-full h-full rounded-3xl bg-white border border-pink-100 shadow-soft overflow-hidden flex flex-col justify-between select-none ${isTopCard ? 'cursor-grab active:cursor-grabbing card-transition' : ''}`;
     card.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
     card.style.zIndex = zIndex;
     card.setAttribute('data-id', profile.id);
@@ -591,30 +591,30 @@ function renderDeck() {
     } else card.setAttribute('aria-hidden', 'true');
     card.innerHTML = `
       <div class="relative w-full h-[54%] overflow-hidden bg-zinc-900 pointer-events-none">
-        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover spooderman-original ${guest ? 'blur-[3px] scale-105' : ''}" />
+        <img src="${escapeHtml(safeImageUrl(profile.images?.[0]?.url || profile.image))}" alt="${escapeHtml(profile.name)}" class="w-full h-full object-cover spooderman-original" />
         <img src="images/spooderman.webp" alt="" class="spooderman-hover absolute inset-0 w-full h-full object-contain opacity-0 transition-opacity duration-200 ease-out pointer-events-none" aria-hidden="true" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent"></div>
         <div class="stamp-like absolute top-6 left-6 border-4 border-emerald-400 text-emerald-400 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[-15deg] opacity-0 transition-opacity">HIRE / MATCH</div>
         <div class="stamp-nope absolute top-6 right-6 border-4 border-rose-500 text-rose-500 font-black text-2xl uppercase tracking-widest px-3 py-1 rounded-xl rotate-[15deg] opacity-0 transition-opacity">PASS</div>
         <div class="stamp-super absolute bottom-14 left-1/2 -translate-x-1/2 border-4 border-sky-400 text-sky-400 font-black text-xl uppercase tracking-wider px-3 py-1 rounded-xl opacity-0 transition-opacity">SUPER LIKE ★</div>
         <div class="absolute top-4 left-4 flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-bold">${guest ? '🔒 Locked Profile' : 'Open for Projects'}</span></div>
-        <div class="absolute bottom-3 left-4 right-4 text-white">
+        <div class="absolute bottom-3 left-4 right-4 text-white ${guest ? 'roster-preview-locked' : ''}">
           <span class="text-[10px] uppercase font-black tracking-widest text-tinder-orange bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full inline-block mb-1">
             ${escapeHtml(profile.persona)}
           </span>
-          <div class="flex items-center gap-2 ${guest ? 'blur-[5px] select-none' : ''}">
+          <div class="flex items-center gap-2">
             <h2 class="text-xl font-black">${escapeHtml(profile.name)}</h2>
             <span class="text-lg font-medium text-zinc-300">${escapeHtml(profile.age)}</span>
             ${profile.verified ? `<i data-lucide="badge-check" class="w-5 h-5 text-sky-400 fill-sky-400"></i>` : ''}
           </div>
-          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5 ${guest ? 'blur-[4px] select-none' : ''}">
+          <p class="text-xs text-zinc-300 font-medium flex items-center gap-1 mt-0.5">
             <i data-lucide="map-pin" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.location)}
           </p>
         </div>
       </div>
 
       <div class="p-4 flex-1 overflow-y-auto space-y-3 bg-white pointer-events-none relative">
-        <div class="flex items-center justify-between border-b border-zinc-100 pb-2 ${guest ? 'blur-[4px] select-none' : ''}">
+        <div class="flex items-center justify-between border-b border-zinc-100 pb-2 ${guest ? 'roster-preview-locked' : ''}">
           <span class="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
             <i data-lucide="briefcase" class="w-3.5 h-3.5 text-tinder-pink"></i> ${escapeHtml(profile.role)}
           </span>
@@ -623,19 +623,19 @@ function renderDeck() {
           </span>
         </div>
 
-        <p class="text-xs text-zinc-600 leading-relaxed font-normal ${guest ? 'blur-[5px] select-none' : ''}">${escapeHtml(profile.bio)}</p>
+        <p class="text-xs text-zinc-600 leading-relaxed font-normal ${guest ? 'roster-preview-locked' : ''}">${escapeHtml(profile.bio)}</p>
 
-        <div class="flex flex-wrap gap-1.5 pt-1 ${guest ? 'blur-[4px] select-none' : ''}">
+        <div class="flex flex-wrap gap-1.5 pt-1 ${guest ? 'roster-preview-locked' : ''}">
           ${(profile.tags || []).map(t => `<span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-bold">⚡ ${escapeHtml(t)}</span>`).join('')}
         </div>
 
-        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1 ${guest ? 'blur-[5px] select-none' : ''}">
+        <div class="bg-rose-50/50 rounded-2xl p-2.5 border border-rose-100/60 space-y-1 ${guest ? 'roster-preview-locked' : ''}">
           <span class="text-[10px] uppercase font-black text-tinder-pink tracking-wider block">Why You Should Match:</span>
           ${(profile.dealbreakers || []).map(d => `<p class="text-[11px] text-zinc-700 font-medium">${escapeHtml(d)}</p>`).join('')}
         </div>
 
         <div class="text-right text-[10px] font-bold text-tinder-pink pt-1">
-          ${guest ? '🔒 Tap card to unlock full profile &rarr;' : 'Click card to open full portfolio &rarr;'}
+          ${guest ? '🔒 Tap card to unlock full profile &rarr;' : 'Tap card to view photos &amp; full portfolio &rarr;'}
         </div>
       </div>
     `;
@@ -956,7 +956,7 @@ async function pingMatchedProfile(profile) {
   }
 }
 
-// REDIRECT DIRECTLY TO MAIN FULL PORTFOLIO PAGE (OR TRIGGER PRANK PAYWALL FOR GUESTS)
+// Open the photo gallery and profile preview before visiting a full portfolio.
 function openProfileScreen(profile) {
   if (!profile) return;
   currentlyViewingProfile = profile;
@@ -964,11 +964,6 @@ function openProfileScreen(profile) {
 
   if (isGuestUser()) {
     openSubscriptionHook(targetPage || 'index.html');
-    return;
-  }
-
-  if (targetPage) {
-    window.location.href = targetPage;
     return;
   }
 
@@ -1040,6 +1035,13 @@ function openProfileScreen(profile) {
   }
   const actions = ensureProfileActions();
   actions.replaceChildren();
+  if (targetPage && safeHref(targetPage) !== '#') {
+    const portfolio = document.createElement('a');
+    portfolio.href = safeHref(targetPage);
+    portfolio.textContent = 'View full portfolio';
+    portfolio.className = 'px-3 py-2 rounded-xl bg-zinc-900 text-white text-xs font-bold';
+    actions.appendChild(portfolio);
+  }
   if (canEditProfile(profile.id)) {
     const edit = document.createElement('button');
     edit.type = 'button'; edit.textContent = 'Edit';
@@ -1054,6 +1056,8 @@ function openProfileScreen(profile) {
   const screen = document.getElementById('fullProfileScreen');
   screen.classList.remove('hidden');
   screen.classList.add('flex');
+  screen.scrollTop = 0;
+  fitGalleryHeight();
   window.scrollTo(0, 0);
   lucide.createIcons();
 }
@@ -1069,6 +1073,11 @@ function ensureProfileActions() {
     content.insertBefore(actions, content.children[1]);
   }
   return actions;
+}
+
+function galleryArrowIcon(direction) {
+  const path = direction < 0 ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
 }
 
 function renderProfileGallery(profile) {
@@ -1130,11 +1139,11 @@ function renderProfileGallery(profile) {
   frame.appendChild(track);
   if (images.length > 1) {
     const previous = document.createElement('button');
-    previous.type = 'button'; previous.textContent = '‹'; previous.setAttribute('aria-label', 'Previous image');
+    previous.type = 'button'; previous.innerHTML = galleryArrowIcon(-1); previous.setAttribute('aria-label', 'Previous image');
     previous.className = 'gallery-arrow gallery-prev';
     previous.addEventListener('click', () => moveGallery(-1));
     const next = document.createElement('button');
-    next.type = 'button'; next.textContent = '›'; next.setAttribute('aria-label', 'Next image');
+    next.type = 'button'; next.innerHTML = galleryArrowIcon(1); next.setAttribute('aria-label', 'Next image');
     next.className = 'gallery-arrow gallery-next';
     next.addEventListener('click', () => moveGallery(1));
     frame.append(previous, next);
@@ -1215,6 +1224,8 @@ function openLightbox(images, index) {
     modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('[data-close]')) closeLightbox(); });
     modal.querySelector('[data-prev]').addEventListener('click', () => moveLightbox(-1));
     modal.querySelector('[data-next]').addEventListener('click', () => moveLightbox(1));
+    modal.querySelector('[data-prev]').innerHTML = galleryArrowIcon(-1);
+    modal.querySelector('[data-next]').innerHTML = galleryArrowIcon(1);
     modal.addEventListener('touchstart', event => { lightboxTouchStartX = event.touches[0].clientX; }, { passive: true });
     modal.addEventListener('touchend', event => {
       const delta = event.changedTouches[0].clientX - lightboxTouchStartX;

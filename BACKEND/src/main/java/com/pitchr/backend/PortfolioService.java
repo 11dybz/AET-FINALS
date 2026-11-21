@@ -113,7 +113,7 @@ public class PortfolioService {
         requireProfileForUpdate(profileId);
         if (files == null || files.isEmpty()) throw badRequest("Select at least one image file");
         long existing = images.countByProfileId(profileId);
-        if (existing + files.size() > MAX_IMAGES) throw badRequest("A profile can have at most 8 images");
+        if (existing + files.size() > MAX_IMAGES) throw badRequest("A profile can have at most " + MAX_IMAGES + " images");
         List<ProfileResponse.Image> added = new ArrayList<>();
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) throw badRequest("An uploaded image is empty");
@@ -138,7 +138,7 @@ public class PortfolioService {
     public List<ProfileResponse.Image> addImageUrl(String profileId, String url) {
         requireProfileForUpdate(profileId);
         validateHttpUrl(url, "image URL");
-        if (images.countByProfileId(profileId) >= MAX_IMAGES) throw badRequest("A profile can have at most 8 images");
+        if (images.countByProfileId(profileId) >= MAX_IMAGES) throw badRequest("A profile can have at most " + MAX_IMAGES + " images");
         int order = images.findByProfileIdOrderByDisplayOrderAscIdAsc(profileId).size();
         ProfileImage image = images.saveAndFlush(new ProfileImage(profileId, order, url, null, null));
         refreshCover(profileId);
